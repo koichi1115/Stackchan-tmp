@@ -5,3 +5,6 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+backups/
+firmware/.pio/
+firmware/include/config.h

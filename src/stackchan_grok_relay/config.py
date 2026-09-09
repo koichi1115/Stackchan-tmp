@@ -4,6 +4,8 @@ import math
 import os
 from urllib.parse import urlparse
 
+from .speech import MOCK_ENGINE, STT_ENGINES, TTS_ENGINES
+
 
 class ConfigError(ValueError):
     pass
@@ -25,6 +27,14 @@ class Config:
     webhook_sender_key: str
     timeout_seconds: float
     max_reply_length: int
+    stt_engine: str
+    stt_url: str
+    tts_engine: str
+    tts_url: str
+    tts_speaker_id: int
+    speech_timeout_seconds: float
+    max_audio_bytes: int
+    mock_transcript: str
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -41,6 +51,9 @@ class Config:
         if not webhook_sender_key:
             raise ConfigError("GROK_WEBHOOK_SENDER_KEY を指定してください。")
 
+        stt_engine = _read_engine("STT_ENGINE", STT_ENGINES)
+        tts_engine = _read_engine("TTS_ENGINE", TTS_ENGINES)
+
         return cls(
             host=host,
             port=port,
@@ -48,6 +61,14 @@ class Config:
             webhook_sender_key=webhook_sender_key,
             timeout_seconds=_read_float("GROK_TIMEOUT_SECONDS", 5.0, 0.1, 60.0),
             max_reply_length=_read_int("MAX_REPLY_LENGTH", 120, 1, 500),
+            stt_engine=stt_engine,
+            stt_url=_read_engine_url("STT_URL", stt_engine),
+            tts_engine=tts_engine,
+            tts_url=_read_engine_url("TTS_URL", tts_engine),
+            tts_speaker_id=_read_int("TTS_SPEAKER_ID", 1, 0, 100_000),
+            speech_timeout_seconds=_read_float("SPEECH_TIMEOUT_SECONDS", 20.0, 0.1, 120.0),
+            max_audio_bytes=_read_int("MAX_AUDIO_BYTES", 1_000_000, 1_024, 8_000_000),
+            mock_transcript=os.getenv("MOCK_TRANSCRIPT", "こんにちは"),
         )
 
 
@@ -60,6 +81,23 @@ def _validate_private_host(host: str) -> None:
         address.is_loopback or any(address in network for network in PRIVATE_NETWORKS)
     ):
         raise ConfigError("RELAY_HOST に公開アドレスは指定できません。")
+
+
+def _read_engine(name: str, allowed: tuple[str, ...]) -> str:
+    engine = os.getenv(name, MOCK_ENGINE)
+    if engine not in allowed:
+        raise ConfigError(f"{name} には {', '.join(allowed)} のいずれかを指定してください。")
+    return engine
+
+
+def _read_engine_url(name: str, engine: str) -> str:
+    url = os.getenv(name, "")
+    if engine == MOCK_ENGINE:
+        return url
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ConfigError(f"{name} に有効な HTTP URL を指定してください。")
+    return url
 
 
 def _read_int(name: str, default: int, minimum: int, maximum: int) -> int:

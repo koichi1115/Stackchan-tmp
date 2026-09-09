@@ -46,6 +46,10 @@ python3 -m stackchan_grok_relay >"$TMP_DIR/relay.log" 2>&1 &
 RELAY_PID=$!
 wait_for_port 127.0.0.1 "$RELAY_TEST_PORT"
 
+echo "--- リレーの待受ログ ---"
+cat "$TMP_DIR/relay.log"
+echo "--- テキスト経路（s1 の /utterance）---"
+
 OUTPUT="$(
 	RELAY_URL="http://127.0.0.1:$RELAY_TEST_PORT/utterance" \
 	python3 -m stackchan_grok_relay.mock_stackchan "こんにちは"
@@ -56,3 +60,40 @@ if [[ "$OUTPUT" != "SPOKEN: こんにちは。" ]]; then
 	echo "オフライン結合検証の出力が一致しません。" >&2
 	exit 1
 fi
+
+echo "--- 実機プロトコル（/device/utterance、モック STT・モック TTS）---"
+
+DEVICE_OUTPUT="$(
+	python3 -m stackchan_grok_relay.device_sim \
+		--relay-url "http://127.0.0.1:$RELAY_TEST_PORT/device/utterance" \
+		--wav tests/fixtures/utterance.wav \
+		--save-reply "$TMP_DIR/reply.wav"
+)"
+printf '%s\n' "$DEVICE_OUTPUT"
+
+if [[ "$DEVICE_OUTPUT" != "SPOKEN: こんにちは。" ]]; then
+	echo "実機プロトコル検証の出力が一致しません。" >&2
+	exit 1
+fi
+
+if [[ ! -s "$TMP_DIR/reply.wav" ]]; then
+	echo "発話音声を受け取れませんでした。" >&2
+	exit 1
+fi
+
+echo "--- 無音（Webhook 到達不可）---"
+kill "$MOCK_PID" 2>/dev/null || true
+wait "$MOCK_PID" 2>/dev/null || true
+MOCK_PID=""
+
+SILENT_OUTPUT="$(
+	python3 -m stackchan_grok_relay.device_sim \
+		--relay-url "http://127.0.0.1:$RELAY_TEST_PORT/device/utterance" \
+		--wav tests/fixtures/utterance.wav 2>/dev/null
+)"
+
+if [[ -n "$SILENT_OUTPUT" ]]; then
+	echo "Webhook 失敗時に発話してはいけません: $SILENT_OUTPUT" >&2
+	exit 1
+fi
+echo "Webhook 失敗時は無音でした。"
