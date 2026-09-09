@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stackchan-grok-relay"
+version = "0.1.0"
+description = "StackChan と Grok Bot の間を中継する小さなリレー"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
