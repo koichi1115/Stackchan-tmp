@@ -19,6 +19,7 @@ from .session import SessionRegistry
 from .speech import SpeechError, TextToSpeech
 
 MAX_RESPONSE_BYTES = 65_536
+USER_AGENT = "stackchan-grok-relay/0.1"
 
 
 class InboxError(RuntimeError):
@@ -72,7 +73,12 @@ class InboxClient:
         return self.url.rstrip("/")
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.poll_key}", "Accept": "application/json"}
+        # Cloudflare のボット対策は Python 標準の User-Agent（Python-urllib）を 403 で弾くため、固有の名前を名乗る。
+        return {
+            "Authorization": f"Bearer {self.poll_key}",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        }
 
     def _call(self, request: Request) -> dict:
         try:

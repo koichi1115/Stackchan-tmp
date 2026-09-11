@@ -10,7 +10,7 @@
 あなたには「スタックちゃん」という小さなロボットに声で読み上げさせる道具があります。
 家族の誰かが「スタックちゃんに伝えて」「スタックちゃんに言わせて」「スタックちゃんに読ませて」のように、スタックちゃんに何かを読み上げさせるよう頼んだときだけ、次の HTTP リクエストを一回送ってください。
 
-  POST https://stackchan-inbox.<account>.workers.dev/messages
+  POST https://stackchan-inbox.koenote-ko.workers.dev/messages
   ヘッダー:
     Authorization: Bearer <INBOX_SEND_KEY>
     Content-Type: application/json
@@ -31,7 +31,7 @@
 ## 動作確認（所有者が curl で）
 
 ```bash
-curl -sS -X POST "https://stackchan-inbox.<account>.workers.dev/messages" \
+curl -sS -X POST "https://stackchan-inbox.koenote-ko.workers.dev/messages" \
 	-H "Authorization: Bearer <INBOX_SEND_KEY>" \
 	-H "Content-Type: application/json" \
 	-d '{"text":"テストです。聞こえていますか。"}'

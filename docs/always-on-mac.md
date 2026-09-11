@@ -95,6 +95,11 @@ WAV は 16 kHz でなくても構いません（VOICEVOX は 24 kHz）。ロボ�
 
 Worker はテキストしか扱いません。音声は通りません。本文は制御文字を除き、長さを制限して保存します。
 
+2026-09-11 に配置済み: `https://stackchan-inbox.koenote-ko.workers.dev`（D1 `stackchan-inbox`、id `0aa46299-f543-45a3-b403-a1533a4caa9f`）。投函 → Mac の巡回 → ロボットの読み上げ → ack まで実機で確認した。注意点が二つある。
+
+- Cloudflare のボット対策は Python 標準の User-Agent（`Python-urllib`）を 403 で弾く。リレーの巡回は `stackchan-grok-relay/0.1` を名乗る。
+- D1 は wrangler でログインしたアカウントに作ること。別アカウントの連携ツールで作った D1 は `database_id` を指定しても見えず、`d1 execute` が 7404 で失敗する。
+
 Grok routine 側には「スタックちゃんに読み上げさせたいときは、この URL に `{"text":"…"}` を送信キー付きで POST する」という手順を持たせます。文面は [`../worker/GROK_ROUTINE.md`](../worker/GROK_ROUTINE.md) にあります。
 
 ## 認証情報の所在（s4）

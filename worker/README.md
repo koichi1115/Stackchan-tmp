@@ -49,9 +49,9 @@ curl -sS "$BASE/messages" -H 'Authorization: Bearer dev-poll'; echo             
    npx --yes wrangler@4 secret put INBOX_POLL_KEY
    ```
 
-4. `deploy` が表示した URL（`https://stackchan-inbox.<account>.workers.dev`）を確認します。
+4. `deploy` が表示した URL（`https://stackchan-inbox.koenote-ko.workers.dev`）を確認します。
    - `INBOX_SEND_KEY` と URL は Grok routine へ（[`GROK_ROUTINE.md`](GROK_ROUTINE.md)）。
    - `INBOX_POLL_KEY` と URL は Mac の `.env`（`INBOX_POLL_KEY`、`INBOX_URL`）へ。
-5. `curl -sS https://stackchan-inbox.<account>.workers.dev/healthz` が `ok` を返せば完了です。
+5. `curl -sS https://stackchan-inbox.koenote-ko.workers.dev/healthz` が `ok` を返せば完了です。
 
 キーを入れ替えるときは `secret put` をやり直すだけです。再配置は不要です。

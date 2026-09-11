@@ -7,4 +7,4 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "stackchan-inbox"
-database_id = "baac1d27-29dc-4946-b723-e937221c5f30"
+database_id = "0aa46299-f543-45a3-b403-a1533a4caa9f"

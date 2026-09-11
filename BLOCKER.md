@@ -99,7 +99,8 @@ s3 の「ボタン A で一往復」を確認したあと、所有者は次を�
 - ~~Mac 上での whisper.cpp / VOICEVOX / リレーの常駐と、実音声での認識精度・往復時間。~~ **2026-09-11 確認済み。** Mac mini M1 に whisper-cpp 1.9.2（`ggml-small.bin`、Metal）、VOICEVOX ENGINE 0.25.2、リレーを launchd で常駐させ、合成音声で一往復 1.1〜1.25 秒。whisper がウェイクワードを別語に書き起こす問題を見つけ、初期プロンプト（`STT_PROMPT`）で解消しました。詳細は [`docs/always-on-mac.md`](docs/always-on-mac.md) の「実音声で分かったこと」。
 - **実際のマイクを通した認識精度。** 上の検証は VOICEVOX の合成音声をシミュレーターへ流したもので、室内の雑音・距離・実機のマイク特性は含みません。
 - 実機でのマイク連続送信と VAD の閾値（`VAD_THRESHOLD` 既定 600 は仮の値）。
-- 受信箱の Worker の本番配置（wrangler の認証待ち）と、Grok routine からの投函。
+- ~~受信箱の Worker の本番配置~~ **2026-09-11 配置済み。投函 → 読み上げ → ack を実機で確認。** Grok routine からの投函はまだ。
+- **Grok の会話用 Webhook（`grok.com/webhook/automation/<id>`）が本文・鍵の渡し方によらず HTTP 400 を返す。** routine 画面の呼び出し例と突き合わせるまで会話経路は未成立。読み上げ経路とウェイクワード応答（「はい？」）は動作済み。
 - WebSocket 版ファームウェアの実機動作（ビルドは通過、書き込みは未実施）。
 - 会話用 Grok Webhook の URL と sender key は未設定のままです（`.env` は例のプレースホルダー）。上の往復検証はモック Webhook で行いました。
 
