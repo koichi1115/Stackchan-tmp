@@ -29,7 +29,7 @@ nano ~/stackchan/app/.env
 
 | 変数 | 値 |
 | --- | --- |
-| `RELAY_HOST` | この Mac の LAN IPv4（`ipconfig getifaddr en0`）。ロボットの `config.h` と同じ値 |
+| `RELAY_HOST` | この Mac の LAN IPv4。ロボットの `config.h` と同じ値。取得は `ipconfig getifaddr "$(route -n get default | awk '/interface:/{print $2}')"`（有線なら en1 のことがあり、`en0` 決め打ちでは空が返ります） |
 | `GROK_WEBHOOK_URL` / `GROK_WEBHOOK_SENDER_KEY` | 会話用 routine の URL と sender key |
 | `STT_ENGINE=whisper_http` / `STT_URL=http://127.0.0.1:8080/inference` | |
 | `TTS_ENGINE=voicevox_http` / `TTS_URL=http://127.0.0.1:50021` | |
