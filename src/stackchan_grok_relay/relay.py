@@ -41,6 +41,7 @@ class RelayService:
                         "code": result.error.code,
                         "attempts": result.error.attempts,
                         "message": result.error.message,
+                        "detail": result.error.detail,
                     },
                     ensure_ascii=False,
                 ),
