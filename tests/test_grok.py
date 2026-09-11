@@ -4,7 +4,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 
 from stackchan_grok_relay.domain import Utterance
-from stackchan_grok_relay.grok import GrokWebhookClient
+from stackchan_grok_relay.grok import GrokWebhookClient, extract_reply
 
 
 class FakeResponse:
@@ -65,12 +65,37 @@ class GrokWebhookClientTests(unittest.TestCase):
 
     @patch("stackchan_grok_relay.grok.urlopen")
     def test_invalid_response_is_not_retried(self, mocked_urlopen) -> None:
-        mocked_urlopen.return_value = FakeResponse({"text": "形式違い"})
+        mocked_urlopen.return_value = FakeResponse({"status": "accepted", "id": 1})
 
         result = self.client.reply(Utterance("質問"))
 
         self.assertEqual(result.error.code, "invalid_response")
         self.assertEqual(mocked_urlopen.call_count, 1)
+
+
+class ExtractReplyTests(unittest.TestCase):
+    def test_accepts_reply_and_other_common_keys(self) -> None:
+        self.assertEqual(extract_reply('{"reply": "こんにちは。"}'), "こんにちは。")
+        self.assertEqual(extract_reply('{"output": "こんにちは。"}'), "こんにちは。")
+        self.assertEqual(extract_reply('{"output": {"text": "こんにちは。"}}'), "こんにちは。")
+        self.assertEqual(extract_reply('"こんにちは。"'), "こんにちは。")
+
+    def test_empty_body_or_empty_reply_means_no_reply(self) -> None:
+        self.assertEqual(extract_reply(""), "")
+        self.assertEqual(extract_reply('{"reply": ""}'), "")
+
+    def test_unknown_shapes_are_none(self) -> None:
+        self.assertIsNone(extract_reply("ok"))
+        self.assertIsNone(extract_reply('{"status": "accepted", "id": 3}'))
+        self.assertIsNone(extract_reply("[1, 2]"))
+
+    @patch("stackchan_grok_relay.grok.urlopen")
+    def test_unknown_shape_reports_detail(self, mocked_urlopen) -> None:
+        mocked_urlopen.return_value = FakeResponse({"status": "accepted"})
+        client = GrokWebhookClient(url="https://example.invalid/webhook", sender_key="k", timeout_seconds=1)
+        result = client.reply(Utterance("質問"))
+        self.assertEqual(result.error.code, "invalid_response")
+        self.assertIn("accepted", result.error.detail)
 
 
 if __name__ == "__main__":

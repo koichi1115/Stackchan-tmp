@@ -199,7 +199,7 @@ class DeviceSession:
 
     def _handle_segment(self, pcm: bytes) -> None:
         was_awake = self._state == STATE_AWAKE and self.clock() < self._awake_until
-        self._set_state(STATE_THINKING)
+        self._send_state(STATE_THINKING)  # ロボットは困り顔で待つ
         try:
             transcript = self._transcribe(pcm)
             if not transcript:

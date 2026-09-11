@@ -16,6 +16,12 @@ class GrokError:
     message: str
     retryable: bool
     attempts: int
+    detail: str = ""  # 診断用。HTTP ステータスや応答本文の先頭（鍵は含めない）
+
+
+# 返答の本文として受け付けるキー。Grok routine 側の応答形式が固定でないため広めに拾う。
+REPLY_KEYS = ("reply", "speak", "text", "output", "response", "message", "result", "content", "answer")
+DETAIL_LIMIT = 300
 
 
 @dataclass(frozen=True)
@@ -49,7 +55,13 @@ class GrokWebhookClient:
                 retryable = 500 <= error.code < 600
                 if retryable and attempt == 1:
                     continue
-                return _failure("http_error", "Webhook が HTTP エラーを返しました。", retryable, attempt)
+                return _failure(
+                    "http_error",
+                    "Webhook が HTTP エラーを返しました。",
+                    retryable,
+                    attempt,
+                    detail=f"HTTP {error.code} " + _snippet(_read_error_body(error)),
+                )
             except (TimeoutError, socket.timeout):
                 if attempt == 1:
                     continue
@@ -58,8 +70,14 @@ class GrokWebhookClient:
                 if attempt == 1:
                     continue
                 return _failure("network_error", "Webhook に接続できませんでした。", True, attempt)
-            except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-                return _failure("invalid_response", "Webhook の応答形式が不正です。", False, attempt)
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
+                return _failure(
+                    "invalid_response",
+                    "Webhook の応答形式が不正です。",
+                    False,
+                    attempt,
+                    detail=str(error),
+                )
 
         return _failure("unknown_error", "Webhook の呼び出しに失敗しました。", False, 2)
 
@@ -76,13 +94,57 @@ class GrokWebhookClient:
         if len(body) > MAX_RESPONSE_BYTES:
             raise ValueError("response_too_large")
 
-        decoded = json.loads(body.decode("utf-8"))
-        if not isinstance(decoded, dict) or not isinstance(decoded.get("reply"), str):
-            raise ValueError("missing_reply")
-        return GrokResult(reply=decoded["reply"])
+        status = getattr(response, "status", None)
+        text = body.decode("utf-8")
+        reply = extract_reply(text)
+        if reply is None:
+            raise ValueError(f"missing_reply: HTTP {status} " + _snippet(text))
+        return GrokResult(reply=reply)
 
 
-def _failure(code: str, message: str, retryable: bool, attempts: int) -> GrokResult:
+def extract_reply(text: str) -> str | None:
+    """応答本文から発話文を取り出します。取り出せない形なら None です。
+
+    受け付ける形: {"reply": "..."} をはじめ REPLY_KEYS のいずれかが文字列、
+    入れ子（{"output": {"text": "..."}} など）、または本文全体が JSON 文字列。
+    空文字列は「返答なし」として空文字列のまま返します。
+    """
+    stripped = text.strip()
+    if not stripped:
+        return ""
+    try:
+        decoded = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    return _reply_from(decoded, depth=0)
+
+
+def _reply_from(value: object, depth: int) -> str | None:
+    if isinstance(value, str):
+        return value
+    if depth >= 3 or not isinstance(value, dict):
+        return None
+    for key in REPLY_KEYS:
+        if key in value:
+            found = _reply_from(value[key], depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
+def _read_error_body(error: HTTPError) -> str:
+    try:
+        return error.read(4_096).decode("utf-8", "replace")
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def _snippet(text: str) -> str:
+    compact = " ".join(text.split())
+    return compact[:DETAIL_LIMIT]
+
+
+def _failure(code: str, message: str, retryable: bool, attempts: int, detail: str = "") -> GrokResult:
     return GrokResult(
         reply="",
         error=GrokError(
@@ -90,5 +152,6 @@ def _failure(code: str, message: str, retryable: bool, attempts: int) -> GrokRes
             message=message,
             retryable=retryable,
             attempts=attempts,
+            detail=detail,
         ),
     )
