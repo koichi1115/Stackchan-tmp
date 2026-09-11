@@ -5,6 +5,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# ファイルの大きさ（バイト）。GNU の stat -c と BSD の stat -f の差を避けるため wc を使います。
+file_size() {
+	wc -c <"$1" | tr -d '[:space:]'
+}
+
 PORT=""
 BACKUP_DIR=""
 BAUD="460800"
@@ -89,7 +94,7 @@ echo "[1/5] バックアップの SHA-256 を検証します。"
 }
 
 ACTUAL_HASH="$(sha256sum "$IMAGE" | cut -d ' ' -f 1)"
-ACTUAL_BYTES="$(stat -c %s "$IMAGE")"
+ACTUAL_BYTES="$(file_size "$IMAGE")"
 if [[ "$ACTUAL_HASH" != "$EXPECTED_HASH" || "$ACTUAL_BYTES" != "$EXPECTED_BYTES" ]]; then
 	echo "バックアップが manifest.txt と一致しません。書き戻しを中止します。" >&2
 	exit 1
@@ -101,11 +106,11 @@ CURRENT_LABEL="$(sed -n 's/^Detected flash size: \(.*\)$/\1/p' "$BACKUP_DIR/rest
 CURRENT_CHIP="$(sed -n -E 's/^Chip (is|type:) *(.*)$/\2/p' "$BACKUP_DIR/restore-flash-id.log" | head -n 1)"
 
 if [[ "$CURRENT_LABEL" != "$FLASH_LABEL" ]]; then
-	echo "フラッシュ容量がバックアップ時と異なります（$CURRENT_LABEL != $FLASH_LABEL）。中止します。" >&2
+	echo "フラッシュ容量がバックアップ時と異なります（$CURRENT_LABEL != ${FLASH_LABEL}）。中止します。" >&2
 	exit 1
 fi
 if [[ -n "$MANIFEST_CHIP" && "$MANIFEST_CHIP" != "unknown" && "$CURRENT_CHIP" != "$MANIFEST_CHIP" ]]; then
-	echo "チップがバックアップ時と異なります（$CURRENT_CHIP != $MANIFEST_CHIP）。中止します。" >&2
+	echo "チップがバックアップ時と異なります（$CURRENT_CHIP != ${MANIFEST_CHIP}）。中止します。" >&2
 	exit 1
 fi
 
@@ -132,7 +137,7 @@ trap 'rm -f "$READBACK"' EXIT
 echo "[5/5] SHA-256 を照合します。"
 READBACK_HASH="$(sha256sum "$READBACK" | cut -d ' ' -f 1)"
 if [[ "$READBACK_HASH" != "$EXPECTED_HASH" ]]; then
-	echo "書き戻し後の SHA-256 が一致しません（$READBACK_HASH != $EXPECTED_HASH）。" >&2
+	echo "書き戻し後の SHA-256 が一致しません（$READBACK_HASH != ${EXPECTED_HASH}）。" >&2
 	echo "電源を切らずに、もう一度このスクリプトを実行してください。" >&2
 	exit 1
 fi

@@ -127,3 +127,23 @@ class SpeechConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SttPromptTests(unittest.TestCase):
+    """whisper の初期プロンプト。ウェイクワードが別語に化けるのを防ぎます。"""
+
+    @patch.dict(os.environ, dict(BASE_ENV), clear=True)
+    def test_defaults_to_the_first_wake_word(self) -> None:
+        self.assertEqual(Config.from_env().stt_prompt, "スタックちゃん")
+
+    @patch.dict(os.environ, {**BASE_ENV, "WAKE_WORDS": "ロボくん,ろぼくん"}, clear=True)
+    def test_follows_a_custom_wake_word(self) -> None:
+        self.assertEqual(Config.from_env().stt_prompt, "ロボくん")
+
+    @patch.dict(os.environ, {**BASE_ENV, "STT_PROMPT": "スタックちゃん、天気"}, clear=True)
+    def test_an_explicit_prompt_wins(self) -> None:
+        self.assertEqual(Config.from_env().stt_prompt, "スタックちゃん、天気")
+
+    @patch.dict(os.environ, {**BASE_ENV, "STT_PROMPT": ""}, clear=True)
+    def test_an_empty_prompt_disables_it(self) -> None:
+        self.assertEqual(Config.from_env().stt_prompt, "")

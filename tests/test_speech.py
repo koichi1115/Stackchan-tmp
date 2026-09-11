@@ -1,5 +1,7 @@
 import unittest
+from unittest import mock
 
+from stackchan_grok_relay import speech
 from stackchan_grok_relay.speech import (
     MockSpeechToText,
     MockTextToSpeech,
@@ -120,6 +122,42 @@ class EngineSelectionTests(unittest.TestCase):
             )
         with self.assertRaises(ValueError):
             build_text_to_speech(engine="unknown", url="", speaker_id=1, timeout_seconds=1.0)
+
+
+class WhisperPromptTests(unittest.TestCase):
+    """whisper へ渡す初期プロンプト。無いとウェイクワードが別語に化けます。"""
+
+    def _body(self, prompt: str) -> bytes:
+        engine = WhisperHttpSpeechToText(
+            url="http://127.0.0.1:1/inference", timeout_seconds=0.1, prompt=prompt
+        )
+        captured: dict[str, bytes] = {}
+
+        def fake_post(request, timeout_seconds, stage):
+            captured["body"] = request.data
+            return {"text": "スタックちゃん"}
+
+        with mock.patch.object(speech, "_post_json", fake_post):
+            engine.transcribe(b"RIFF----WAVEfmt ")
+        return captured["body"]
+
+    def test_sends_the_prompt_as_a_form_field(self) -> None:
+        body = self._body("スタックちゃん")
+
+        self.assertIn(b'name="prompt"', body)
+        self.assertIn("スタックちゃん".encode("utf-8"), body)
+
+    def test_omits_the_field_when_the_prompt_is_empty(self) -> None:
+        body = self._body("")
+
+        self.assertNotIn(b'name="prompt"', body)
+
+    def test_body_stays_a_well_formed_multipart(self) -> None:
+        body = self._body("スタックちゃん")
+
+        self.assertTrue(body.endswith(b"--\r\n"))
+        self.assertEqual(body.count(b'Content-Disposition: form-data; name="file"'), 1)
+        self.assertEqual(body.count(b'name="response_format"'), 1)
 
 
 class RealEngineFailureTests(unittest.TestCase):

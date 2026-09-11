@@ -5,11 +5,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 PATTERN='(xai-[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|Bearer [A-Za-z0-9._-]{24,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
-mapfile -d '' FILES < <(git ls-files -z --cached --others --exclude-standard | while IFS= read -r -d '' file; do
+# macOS 標準の bash 3.2 には mapfile がないので、while で読み込みます。
+FILES=()
+while IFS= read -r -d '' file; do
 	if [[ "$file" != ".env.example" ]]; then
-		printf '%s\0' "$file"
+		FILES+=("$file")
 	fi
-done)
+done < <(git ls-files -z --cached --others --exclude-standard)
 
 if ((${#FILES[@]} > 0)); then
 	FINDINGS="$(grep -EnH --binary-files=without-match -e "$PATTERN" -- "${FILES[@]}" || true)"
@@ -30,7 +32,10 @@ if git ls-files --error-unmatch firmware/include/config.h >/dev/null 2>&1; then
 	FIRMWARE_FINDINGS+="firmware/include/config.h が Git 管理下にあります。"$'\n'
 fi
 
-mapfile -d '' FIRMWARE_FILES < <(git ls-files -z --cached --others --exclude-standard -- firmware)
+FIRMWARE_FILES=()
+while IFS= read -r -d '' file; do
+	FIRMWARE_FILES+=("$file")
+done < <(git ls-files -z --cached --others --exclude-standard -- firmware)
 if ((${#FIRMWARE_FILES[@]} > 0)); then
 	KEY_PATTERN='#[[:space:]]*define[[:space:]]+[A-Za-z0-9_]*(API_KEY|APIKEY|TOKEN|SECRET|SENDER_KEY|WEBHOOK|CREDENTIAL|PRIVATE_KEY)'
 	FIRMWARE_FINDINGS+="$(grep -EnH --binary-files=without-match -e "$KEY_PATTERN" -- "${FIRMWARE_FILES[@]}" || true)"

@@ -63,24 +63,34 @@ class MockTextToSpeech:
 
 @dataclass(frozen=True)
 class WhisperHttpSpeechToText:
-    """whisper.cpp の HTTP サーバー（`/inference`）に音声を渡します。鍵は不要です。"""
+    """whisper.cpp の HTTP サーバー（`/inference`）に音声を渡します。鍵は不要です。
+
+    `prompt` は whisper の初期プロンプトです。ウェイクワードのような固有名詞は、
+    これを渡さないと近い音の一般語に置き換えられます（「スタックちゃん」→「スタークちゃん」）。
+    語を並べると語順が崩れたり無音時の幻聴に紛れ込んだりするため、一語だけ渡します。
+    """
 
     url: str
     timeout_seconds: float
+    prompt: str = ""
 
     def transcribe(self, audio: bytes) -> str:
         boundary = "----stackchan-grok-relay-boundary"
-        body = b"".join(
-            (
-                f"--{boundary}\r\n".encode("utf-8"),
-                b'Content-Disposition: form-data; name="file"; filename="utterance.wav"\r\n',
-                b"Content-Type: audio/wav\r\n\r\n",
-                audio,
-                f"\r\n--{boundary}\r\n".encode("utf-8"),
-                b'Content-Disposition: form-data; name="response_format"\r\n\r\njson\r\n',
-                f"--{boundary}--\r\n".encode("utf-8"),
-            )
-        )
+        parts = [
+            f"--{boundary}\r\n".encode("utf-8"),
+            b'Content-Disposition: form-data; name="file"; filename="utterance.wav"\r\n',
+            b"Content-Type: audio/wav\r\n\r\n",
+            audio,
+            f"\r\n--{boundary}\r\n".encode("utf-8"),
+            b'Content-Disposition: form-data; name="response_format"\r\n\r\njson\r\n',
+        ]
+        if self.prompt:
+            parts.append(f"--{boundary}\r\n".encode("utf-8"))
+            parts.append(b'Content-Disposition: form-data; name="prompt"\r\n\r\n')
+            parts.append(self.prompt.encode("utf-8"))
+            parts.append(b"\r\n")
+        parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+        body = b"".join(parts)
         request = Request(
             self.url,
             data=body,
@@ -133,12 +143,18 @@ class VoicevoxHttpTextToSpeech:
 
 
 def build_speech_to_text(
-    engine: str, url: str, timeout_seconds: float, mock_transcript: str
+    engine: str,
+    url: str,
+    timeout_seconds: float,
+    mock_transcript: str,
+    prompt: str = "",
 ) -> SpeechToText:
     if engine == MOCK_ENGINE:
         return MockSpeechToText(transcript=mock_transcript)
     if engine == WHISPER_HTTP_ENGINE:
-        return WhisperHttpSpeechToText(url=url, timeout_seconds=timeout_seconds)
+        return WhisperHttpSpeechToText(
+            url=url, timeout_seconds=timeout_seconds, prompt=prompt
+        )
     raise ValueError(f"STT_ENGINE は {STT_ENGINES} のいずれかにしてください。")
 
 

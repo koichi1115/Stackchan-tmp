@@ -73,7 +73,7 @@ s1 の時点の判断は「ベンダーが正式な送出・受信経路を提�
 - `scripts/backup-device.sh` は **2026-09-10 に実機で成功行まで確認済み**（esptool v5.4.0、純正 stack-chan 1.4.2 / 1.2.6 を `backups/20260909T233725Z/` に保存、SHA-256 二回一致）。`scripts/restore-device.sh` は**まだ実機で実行していません**。esptool v5 の `Chip type:` 出力に合わせて両スクリプトのチップ名解釈を修正済み。
 - マイクの録音品質が音声認識に足りること。`RECORD_SECONDS` の妥当性。
 - 返答音声の再生品質と、PSRAM 容量に対する応答音声の大きさ。
-- whisper.cpp サーバーと VOICEVOX ENGINE を実際につないだときの往復時間。
+- ~~whisper.cpp サーバーと VOICEVOX ENGINE を実際につないだときの往復時間。~~ **2026-09-11 に Mac 上で実測、1.1〜1.25 秒**（合成音声、Grok はモック）。5b を参照。
 
 検証済みなのは、リレー側のオフライン一往復（モック STT・モック TTS・モック Webhook）と、無音の扱いです。実機で一往復が成立したかどうかは、この文書に書かれていません。
 
@@ -96,10 +96,12 @@ s3 の「ボタン A で一往復」を確認したあと、所有者は次を�
 
 ### s4 で未検証のこと
 
-- Mac 上での whisper.cpp / VOICEVOX / リレーの常駐と、実音声での認識精度・往復時間。
+- ~~Mac 上での whisper.cpp / VOICEVOX / リレーの常駐と、実音声での認識精度・往復時間。~~ **2026-09-11 確認済み。** Mac mini M1 に whisper-cpp 1.9.2（`ggml-small.bin`、Metal）、VOICEVOX ENGINE 0.25.2、リレーを launchd で常駐させ、合成音声で一往復 1.1〜1.25 秒。whisper がウェイクワードを別語に書き起こす問題を見つけ、初期プロンプト（`STT_PROMPT`）で解消しました。詳細は [`docs/always-on-mac.md`](docs/always-on-mac.md) の「実音声で分かったこと」。
+- **実際のマイクを通した認識精度。** 上の検証は VOICEVOX の合成音声をシミュレーターへ流したもので、室内の雑音・距離・実機のマイク特性は含みません。
 - 実機でのマイク連続送信と VAD の閾値（`VAD_THRESHOLD` 既定 600 は仮の値）。
 - 受信箱の Worker の本番配置（wrangler の認証待ち）と、Grok routine からの投函。
 - WebSocket 版ファームウェアの実機動作（ビルドは通過、書き込みは未実施）。
+- 会話用 Grok Webhook の URL と sender key は未設定のままです（`.env` は例のプレースホルダー）。上の往復検証はモック Webhook で行いました。
 
 ## 6. やらないこと
 

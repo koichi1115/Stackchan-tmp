@@ -77,6 +77,11 @@ if ! command -v sha256sum >/dev/null 2>&1; then
 	exit 2
 fi
 
+# ファイルの大きさ（バイト）。GNU の stat -c と BSD の stat -f の差を避けるため wc を使います。
+file_size() {
+	wc -c <"$1" | tr -d '[:space:]'
+}
+
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_DIR="$OUTPUT_ROOT/$TIMESTAMP"
 mkdir -p "$BACKUP_DIR"
@@ -134,18 +139,18 @@ fi
 echo "[3/7] フラッシュ全体を読み出します（1 回目）。"
 "${ESPTOOL[@]}" --port "$PORT" --baud "$BAUD" read_flash 0 "$FLASH_BYTES" "$FULL_IMAGE" 2>&1 | tee "$BACKUP_DIR/read-1.log"
 
-ACTUAL_BYTES="$(stat -c %s "$FULL_IMAGE")"
+ACTUAL_BYTES="$(file_size "$FULL_IMAGE")"
 if [[ "$ACTUAL_BYTES" != "$FLASH_BYTES" ]]; then
-	echo "読み出し長が検出容量と一致しません（$ACTUAL_BYTES != $FLASH_BYTES）。バックアップは無効です。" >&2
+	echo "読み出し長が検出容量と一致しません（$ACTUAL_BYTES != ${FLASH_BYTES}）。バックアップは無効です。" >&2
 	exit 1
 fi
 
 echo "[4/7] フラッシュ全体をもう一度読み出します（2 回目）。"
 "${ESPTOOL[@]}" --port "$PORT" --baud "$BAUD" read_flash 0 "$FLASH_BYTES" "$VERIFY_IMAGE" 2>&1 | tee "$BACKUP_DIR/read-2.log"
 
-VERIFY_BYTES="$(stat -c %s "$VERIFY_IMAGE")"
+VERIFY_BYTES="$(file_size "$VERIFY_IMAGE")"
 if [[ "$VERIFY_BYTES" != "$FLASH_BYTES" ]]; then
-	echo "2 回目の読み出し長が検出容量と一致しません（$VERIFY_BYTES != $FLASH_BYTES）。バックアップは無効です。" >&2
+	echo "2 回目の読み出し長が検出容量と一致しません（$VERIFY_BYTES != ${FLASH_BYTES}）。バックアップは無効です。" >&2
 	exit 1
 fi
 

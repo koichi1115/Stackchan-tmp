@@ -94,6 +94,7 @@ def build_server(config: Config) -> ThreadingHTTPServer:
         url=config.stt_url,
         timeout_seconds=config.speech_timeout_seconds,
         mock_transcript=config.mock_transcript,
+        prompt=config.stt_prompt,
     )
     text_to_speech = build_text_to_speech(
         engine=config.tts_engine,

@@ -37,6 +37,7 @@ class Config:
     max_audio_bytes: int
     mock_transcript: str
     # s4: ウェイクワード・VAD・受信箱
+    stt_prompt: str = ""
     wake_words: tuple[str, ...] = DEFAULT_WAKE_WORDS
     wake_ack_text: str = "はい？"
     wake_window_seconds: float = 8.0
@@ -65,6 +66,7 @@ class Config:
 
         stt_engine = _read_engine("STT_ENGINE", STT_ENGINES)
         tts_engine = _read_engine("TTS_ENGINE", TTS_ENGINES)
+        wake_words = _read_words("WAKE_WORDS", DEFAULT_WAKE_WORDS)
 
         return cls(
             host=host,
@@ -81,7 +83,8 @@ class Config:
             speech_timeout_seconds=_read_float("SPEECH_TIMEOUT_SECONDS", 20.0, 0.1, 120.0),
             max_audio_bytes=_read_int("MAX_AUDIO_BYTES", 1_000_000, 1_024, 8_000_000),
             mock_transcript=os.getenv("MOCK_TRANSCRIPT", "こんにちは"),
-            wake_words=_read_words("WAKE_WORDS", DEFAULT_WAKE_WORDS),
+            stt_prompt=_read_stt_prompt(wake_words),
+            wake_words=wake_words,
             wake_ack_text=os.getenv("WAKE_ACK_TEXT", "はい？").strip() or "はい？",
             wake_window_seconds=_read_float("WAKE_WINDOW_SECONDS", 8.0, 1.0, 60.0),
             vad_threshold=_read_float("VAD_THRESHOLD", 600.0, 1.0, 32_767.0),
@@ -111,6 +114,21 @@ def _read_words(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     raw = os.getenv(name, "")
     words = tuple(word.strip() for word in raw.split(",") if word.strip())
     return words or default
+
+
+def _read_stt_prompt(wake_words: tuple[str, ...]) -> str:
+    """whisper に渡す初期プロンプト。
+
+    既定はウェイクワードの先頭の一語です。これを渡さないと whisper は
+    「スタックちゃん」を「スタークちゃん」「スタッグちゃん」と書き起こし、
+    ウェイクワード判定が通りません。複数語を並べると語順が入れ替わるうえ、
+    無音に対する幻聴へ紛れ込んで誤起動の元になるため、一語に絞っています。
+    `STT_PROMPT=` と明示的に空にすれば渡しません。
+    """
+    configured = os.getenv("STT_PROMPT")
+    if configured is not None:
+        return configured.strip()
+    return wake_words[0] if wake_words else ""
 
 
 def _read_inbox_url() -> str:

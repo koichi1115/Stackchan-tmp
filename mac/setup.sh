@@ -104,7 +104,7 @@ brew_install_if_missing sevenzip
 
 WHISPER_PREFIX="$(brew --prefix whisper-cpp)"
 WHISPER_SERVER="$WHISPER_PREFIX/bin/whisper-server"
-[[ -x "$WHISPER_SERVER" ]] || die "whisper-server が見つかりません: $WHISPER_SERVER（whisper-cpp の版によっては同梱されないことがあります。brew info whisper-cpp を確認してください）"
+[[ -x "$WHISPER_SERVER" ]] || die "whisper-server が見つかりません: ${WHISPER_SERVER}（whisper-cpp の版によっては同梱されないことがあります。brew info whisper-cpp を確認してください）"
 
 SEVENZIP="$(command -v 7zz || true)"
 [[ -n "$SEVENZIP" ]] || SEVENZIP="$(brew --prefix sevenzip)/bin/7zz"
@@ -168,7 +168,7 @@ for a in assets:
 	"$SEVENZIP" x -y -o"$VOICEVOX_DIR" "$FIRST_PART" >"$LOGS_DIR/voicevox-extract.log" 2>&1 || die "展開に失敗しました。$LOGS_DIR/voicevox-extract.log を確認してください。"
 
 	VOICEVOX_RUN="$(find_voicevox_run)"
-	[[ -n "$VOICEVOX_RUN" ]] || die "展開後に run が見つかりません（$VOICEVOX_DIR）。"
+	[[ -n "$VOICEVOX_RUN" ]] || die "展開後に run が見つかりません（${VOICEVOX_DIR}）。"
 	chmod +x "$VOICEVOX_RUN"
 	xattr -dr com.apple.quarantine "$(dirname "$VOICEVOX_RUN")" 2>/dev/null || true
 	rm -f "${PART_FILES[@]}"
