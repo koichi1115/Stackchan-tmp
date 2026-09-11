@@ -56,7 +56,7 @@ if [[ -z "$PORT" ]]; then
 	exit 2
 fi
 
-if [[ ! -e "$PORT" ]]; then
+if [[ ! "$PORT" =~ ^COM[0-9]+$ && ! -e "$PORT" ]]; then
 	echo "シリアルポートが見つかりません: $PORT" >&2
 	exit 2
 fi
@@ -90,7 +90,7 @@ echo "[1/7] チップとフラッシュ容量を検出します。"
 "${ESPTOOL[@]}" version >"$BACKUP_DIR/esptool-version.txt" 2>&1 || true
 "${ESPTOOL[@]}" --port "$PORT" --baud "$BAUD" flash_id 2>&1 | tee "$BACKUP_DIR/chip-info.txt"
 
-CHIP="$(sed -n 's/^Chip is \(.*\)$/\1/p' "$BACKUP_DIR/chip-info.txt" | head -n 1)"
+CHIP="$(sed -n -E 's/^Chip (is|type:) *(.*)$/\2/p' "$BACKUP_DIR/chip-info.txt" | head -n 1)"
 FLASH_SIZE_LABEL="$(sed -n 's/^Detected flash size: \(.*\)$/\1/p' "$BACKUP_DIR/chip-info.txt" | head -n 1)"
 
 if [[ -z "$FLASH_SIZE_LABEL" ]]; then

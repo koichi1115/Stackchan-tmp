@@ -1,0 +1,10 @@
+# stackchan-inbox — Grok が投函し、常時起動 Mac が取り出すテキスト専用の受信箱
+name = "stackchan-inbox"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "stackchan-inbox"
+database_id = "baac1d27-29dc-4946-b723-e937221c5f30"

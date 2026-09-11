@@ -118,7 +118,14 @@ backups/20260909T101500Z/
 
 フラッシュ容量表記の解釈、パーティションテーブルの走査、アプリ記述子の読み取りは [`../scripts/flash_tools.py`](../scripts/flash_tools.py) に分離してあり、合成イメージに対する単体テスト（`tests/test_flash_tools.py`、`./scripts/test-all.sh` に含まれます）で確認済みです。
 
-一方で、**`esptool` を呼び出す部分は実機が無いと実行できないため、まだ一度も動かしていません。** 最初の実行では、成功行が出るかどうかを特に注意して確認してください。
+`esptool` を呼び出す部分は、2026-09-10 に実機（ESP32-S3 / 16MB、esptool v5.4.0、Windows 11 の Git Bash から `--port COM7`）で一度実行し、成功行まで到達することを確認済みです。純正ファームウェアは `stack-chan` 1.4.2（ota_1 で起動中）と 1.2.6（ota_0）でした。
+
+### Windows で実行するときの注意
+
+- ポートは `COM7` のように COM 名で指定します。`ls /dev/tty*` では見えません。`Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -match 'COM\d+' }` で探せます。
+- Windows の `python3` はストアのスタブで実体がないことがあります。その場合は `python3` が本物の `python.exe` を呼ぶ shim を PATH の先頭に置いてから実行してください。
+- esptool v5 は `Chip is ...` ではなく `Chip type: ...` と出力します。スクリプトは両形式を解釈します。
+- `tests/test_backup_script.py` は Python の `subprocess` から `bash` を起動しますが、Windows では System32 の WSL 用 `bash.exe` が優先されて失敗します。このテストは Linux/macOS または WSL 内で実行してください。
 
 ## 失敗したときに触ってはいけないこと
 

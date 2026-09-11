@@ -68,14 +68,38 @@ s1 の時点の判断は「ベンダーが正式な送出・受信経路を提�
 
 以下は所有者が実機で確認するまで未確定です。クラウド側では確認できません。
 
-- `firmware/` が実際にビルドできること。**この作業環境には PlatformIO も外部ネットワークも無いため、ビルドを一度も実行していません。**
-- 対象基板・MCU・フラッシュ容量の確定値。**外部ネットワークへ接続できず、[M5Stack 製品マニュアル](https://docs.m5stack.com/en/StackChan)の記載値を転記できていません。** `scripts/backup-device.sh` は容量を仮定せず `esptool` で実測しますが、公式ドキュメントとの突き合わせは所有者が行う必要があります。
-- `scripts/backup-device.sh` と `scripts/restore-device.sh` の実機での動作。**実機も esptool も無いため、esptool を呼ぶ部分は一度も実行していません。** 検証済みなのは、スクリプトが依存する解析ロジック（`scripts/flash_tools.py`：フラッシュ容量表記の解釈、パーティションテーブルの走査、アプリ記述子の読み取り）だけで、これは合成イメージに対する単体テスト（`tests/test_flash_tools.py`）で確認しています。
+- ~~`firmware/` が実際にビルドできること。~~ **2026-09-10 確認済み。** PlatformIO 6.1.19、espressif32@6.9.0、env `cores3` でビルド成功（Flash 1,092,105 バイト、RAM 49,304 バイト）。COM7 へ書き込み後、起動ログに `Wi-Fi: 192.168.0.11` と「ボタン A で一往復します。」が出た。
+- ~~対象基板・MCU・フラッシュ容量の確定値。~~ **2026-09-10 確認済み。** 実測 ESP32-S3 (QFN56) rev v0.2 / 16MB、[M5Stack 製品マニュアル](https://docs.m5stack.com/en/StackChan)の記載（CoreS3、ESP32-S3、16MB Flash、8MB PSRAM）と一致。転記先は `docs/real-device-path.md`。
+- `scripts/backup-device.sh` は **2026-09-10 に実機で成功行まで確認済み**（esptool v5.4.0、純正 stack-chan 1.4.2 / 1.2.6 を `backups/20260909T233725Z/` に保存、SHA-256 二回一致）。`scripts/restore-device.sh` は**まだ実機で実行していません**。esptool v5 の `Chip type:` 出力に合わせて両スクリプトのチップ名解釈を修正済み。
 - マイクの録音品質が音声認識に足りること。`RECORD_SECONDS` の妥当性。
 - 返答音声の再生品質と、PSRAM 容量に対する応答音声の大きさ。
 - whisper.cpp サーバーと VOICEVOX ENGINE を実際につないだときの往復時間。
 
 検証済みなのは、リレー側のオフライン一往復（モック STT・モック TTS・モック Webhook）と、無音の扱いです。実機で一往復が成立したかどうかは、この文書に書かれていません。
+
+## 5b. 所有者の決定（s4、2026-09-10）
+
+s3 の「ボタン A で一往復」を確認したあと、所有者は次を目標に定めました。
+
+1. ウェイクワード「スタックちゃん」で起動する。
+2. Grok Bot から指示された文（主に家族チャット）をロボットが読み上げる。
+3. ウェイクワード → STT → Grok → TTS の会話をモックではなく本物で行う。
+4. リレーはこの PC ではなく常時起動の Mac（Apple Silicon）に置く。
+
+選んだ方式は次のとおりです（所有者が選択）。
+
+- Grok からロボットへ届ける経路は **Cloudflare Worker の受信箱**。Grok が投函し、Mac が外向き HTTPS で取りに行く。家に受信口は開けない。これは s1 の「公開受信口を作らない」を家のネットワークについて維持したまま、家の外に小さな郵便受けを一つ置く変更である。
+- ウェイクワードは **Mac 側で検出**（VAD → whisper.cpp の文字起こし → 先頭一致）。ロボットに鍵や追加のアカウントを持たせない。
+- 配置はこの PC から **SSH** で行う。
+
+設計と手順は [`docs/always-on-mac.md`](docs/always-on-mac.md)。実装はリレー（`src/stackchan_grok_relay/`）、Worker（`worker/`）、Mac のセットアップ（`mac/`）、WebSocket 版ファームウェア（`firmware/`）。
+
+### s4 で未検証のこと
+
+- Mac 上での whisper.cpp / VOICEVOX / リレーの常駐と、実音声での認識精度・往復時間。
+- 実機でのマイク連続送信と VAD の閾値（`VAD_THRESHOLD` 既定 600 は仮の値）。
+- 受信箱の Worker の本番配置（wrangler の認証待ち）と、Grok routine からの投函。
+- WebSocket 版ファームウェアの実機動作（ビルドは通過、書き込みは未実施）。
 
 ## 6. やらないこと
 

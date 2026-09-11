@@ -34,6 +34,13 @@ def clamp_reply(reply: str, max_length: int) -> str:
     return cleaned[:max_length].rstrip()
 
 
+def clean_text(text: str, max_length: int) -> str:
+    """読み上げ用。制御文字を除き、空白を詰め、長さだけを制限します（一文には切りません）。"""
+    cleaned = "".join(_clean_character(character) for character in text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:max_length].rstrip()
+
+
 def _clean_character(character: str) -> str:
     if character in "\r\n\t":
         return " "

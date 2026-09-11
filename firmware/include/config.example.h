@@ -14,6 +14,3 @@
 // リレーの LAN アドレス（RELAY_HOST に設定したプライベート IPv4）
 #define RELAY_HOST "192.168.1.20"
 #define RELAY_PORT 8787
-
-// 一回の録音の長さ（秒）
-#define RECORD_SECONDS 5

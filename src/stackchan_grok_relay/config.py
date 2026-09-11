@@ -5,6 +5,7 @@ import os
 from urllib.parse import urlparse
 
 from .speech import MOCK_ENGINE, STT_ENGINES, TTS_ENGINES
+from .wake import DEFAULT_WAKE_WORDS
 
 
 class ConfigError(ValueError):
@@ -35,6 +36,17 @@ class Config:
     speech_timeout_seconds: float
     max_audio_bytes: int
     mock_transcript: str
+    # s4: ウェイクワード・VAD・受信箱
+    wake_words: tuple[str, ...] = DEFAULT_WAKE_WORDS
+    wake_ack_text: str = "はい？"
+    wake_window_seconds: float = 8.0
+    vad_threshold: float = 600.0
+    vad_silence_ms: float = 700.0
+    vad_max_seconds: float = 12.0
+    inbox_url: str = ""
+    inbox_poll_key: str = ""
+    inbox_poll_seconds: float = 5.0
+    inbox_message_ttl_seconds: float = 21_600.0
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -69,6 +81,18 @@ class Config:
             speech_timeout_seconds=_read_float("SPEECH_TIMEOUT_SECONDS", 20.0, 0.1, 120.0),
             max_audio_bytes=_read_int("MAX_AUDIO_BYTES", 1_000_000, 1_024, 8_000_000),
             mock_transcript=os.getenv("MOCK_TRANSCRIPT", "こんにちは"),
+            wake_words=_read_words("WAKE_WORDS", DEFAULT_WAKE_WORDS),
+            wake_ack_text=os.getenv("WAKE_ACK_TEXT", "はい？").strip() or "はい？",
+            wake_window_seconds=_read_float("WAKE_WINDOW_SECONDS", 8.0, 1.0, 60.0),
+            vad_threshold=_read_float("VAD_THRESHOLD", 600.0, 1.0, 32_767.0),
+            vad_silence_ms=_read_float("VAD_SILENCE_MS", 700.0, 100.0, 5_000.0),
+            vad_max_seconds=_read_float("VAD_MAX_SECONDS", 12.0, 1.0, 60.0),
+            inbox_url=_read_inbox_url(),
+            inbox_poll_key=os.getenv("INBOX_POLL_KEY", ""),
+            inbox_poll_seconds=_read_float("INBOX_POLL_SECONDS", 5.0, 1.0, 3_600.0),
+            inbox_message_ttl_seconds=_read_float(
+                "INBOX_MESSAGE_TTL_SECONDS", 21_600.0, 60.0, 30 * 24 * 3_600.0
+            ),
         )
 
 
@@ -81,6 +105,24 @@ def _validate_private_host(host: str) -> None:
         address.is_loopback or any(address in network for network in PRIVATE_NETWORKS)
     ):
         raise ConfigError("RELAY_HOST に公開アドレスは指定できません。")
+
+
+def _read_words(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    raw = os.getenv(name, "")
+    words = tuple(word.strip() for word in raw.split(",") if word.strip())
+    return words or default
+
+
+def _read_inbox_url() -> str:
+    url = os.getenv("INBOX_URL", "").strip()
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise ConfigError("INBOX_URL には https の URL を指定してください。")
+    if not os.getenv("INBOX_POLL_KEY", ""):
+        raise ConfigError("INBOX_URL を使うときは INBOX_POLL_KEY を指定してください。")
+    return url
 
 
 def _read_engine(name: str, allowed: tuple[str, ...]) -> str:

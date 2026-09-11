@@ -98,7 +98,7 @@ fi
 echo "[2/5] 接続中の実機を確認します。"
 "${ESPTOOL[@]}" --port "$PORT" --baud "$BAUD" flash_id 2>&1 | tee "$BACKUP_DIR/restore-flash-id.log"
 CURRENT_LABEL="$(sed -n 's/^Detected flash size: \(.*\)$/\1/p' "$BACKUP_DIR/restore-flash-id.log" | head -n 1)"
-CURRENT_CHIP="$(sed -n 's/^Chip is \(.*\)$/\1/p' "$BACKUP_DIR/restore-flash-id.log" | head -n 1)"
+CURRENT_CHIP="$(sed -n -E 's/^Chip (is|type:) *(.*)$/\2/p' "$BACKUP_DIR/restore-flash-id.log" | head -n 1)"
 
 if [[ "$CURRENT_LABEL" != "$FLASH_LABEL" ]]; then
 	echo "フラッシュ容量がバックアップ時と異なります（$CURRENT_LABEL != $FLASH_LABEL）。中止します。" >&2
