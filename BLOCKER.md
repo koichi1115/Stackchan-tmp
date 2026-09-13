@@ -96,7 +96,7 @@ s3 の「ボタン A で一往復」を確認したあと、所有者は次を�
 
 ### s4 で分かったこと（2026-09-13）
 
-- Grok の Webhook routine は**非同期**で、呼び出しには起動確認だけが返る。routine がオフのときは本文の無い HTTP 400。s1〜s3 が前提にしていた「Webhook が `{"reply"}` を同期で返す」は成立しない。会話の返答は xAI API の直接呼び出し（`REPLY_ENGINE=grok_api`）に切り替える。Webhook routine は家族チャットからの読み上げの起点として残す。
+- Grok の Webhook routine は**非同期**で、呼び出しには起動確認だけが返る。s1〜s3 が前提にしていた「Webhook が `{"reply"}` を同期で返す」は成立しない。非同期でも動くよう `REPLY_ENGINE=grok_bot`（routine が受信箱へ返事を投函し、リレーが照合 ID で取り出す）を実装したが、**所有者の環境では Grok の Webhook ゲートウェイが全リクエストを 400 で弾き、routine が一度も起動しなかった**（routine のオン・オフ、本文、ヘッダー、鍵の有無に関係なく同じ）。会話の返答は xAI API の直接呼び出し（`REPLY_ENGINE=grok_api`、検索ツール付き）で運用し、実機で確認済み。Grok 側で Webhook トリガーが処理されるようになったら `grok_bot` へ切り替える。
 - 実音声で「スタックちゃん」→「はい？」は Mac 上で成立（whisper.cpp に `STT_PROMPT` でウェイクワードを提示する修正が必要だった）。
 
 ### s4 で未検証のこと

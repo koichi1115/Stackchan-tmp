@@ -87,11 +87,13 @@ WAV は 16 kHz でなくても構いません（VOICEVOX は 24 kHz）。ロボ�
 
 | `REPLY_ENGINE` | 何をするか | 向き |
 | --- | --- | --- |
-| `grok_bot`（所有者の選択） | Grok Bot の routine を Webhook で起こし、`reply_to`（照合 ID）と `reply_url` を渡す。routine は返事を受信箱へ `reply_to` 付きで投函し、リレーはその ID で絞って取り出す（[`../worker/GROK_ROUTINE.md`](../worker/GROK_ROUTINE.md)）。頭脳は所有者の Grok Bot そのもの。返事まで数十秒かかることがあり、上限は `GROK_BOT_REPLY_TIMEOUT_SECONDS`（既定 40 秒） | 会話（要件 3） |
-| `grok_api` | xAI の API（`https://api.x.ai/v1/responses`）を Mac から直接呼び、同期で一文を受け取る。速いが素の Grok。`XAI_TOOLS=web_search` で検索できる | 会話（速さ優先の代替） |
+| `grok_bot`（所有者の希望、**現在は使えない**） | Grok Bot の routine を Webhook で起こし、`reply_to`（照合 ID）と `reply_url` を渡す。routine は返事を受信箱へ `reply_to` 付きで投函し、リレーはその ID で絞って取り出す（[`../worker/GROK_ROUTINE.md`](../worker/GROK_ROUTINE.md)）。頭脳は所有者の Grok Bot そのもの。返事まで数十秒かかることがあり、上限は `GROK_BOT_REPLY_TIMEOUT_SECONDS`（既定 40 秒） | 会話（要件 3） |
+| `grok_api`（**現在の運用**） | xAI の API（`https://api.x.ai/v1/responses`）を Mac から直接呼び、同期で一文を受け取る。速いが素の Grok。`XAI_TOOLS=web_search` で検索できる。2026-09-13 に実機で `{"speak":"こんにちは。"}` を確認 | 会話（要件 3） |
 | `webhook` | 旧方式。routine は起動確認しか返さないので会話には使えない | （互換のため残す） |
 
 `grok_bot` では、受信箱の巡回（読み上げ）は `reply_to` 付きのメッセージを読み上げません。待ち手がいない返事は 2 分後に黙って片付けます。
+
+**2026-09-13 の判断:** `grok_bot` を実機で試したところ、routine の実行履歴が一件も増えず、Webhook のゲートウェイが routine に渡す前に全リクエストを 400 で弾いていました（本文・ヘッダー・鍵の有無を変えても同じ、`scripts/probe-grok-webhook.py` で確認）。Grok 側の Webhook トリガーが実際に処理されるようになるまで、会話は `grok_api` で運用します。コードは残してあるので、直ったら `.env` の `REPLY_ENGINE` を `grok_bot` に変えるだけです。
 
 費用の目安: `grok-4.3` は入力 1.25 ドル / 出力 2.50 ドル（100 万トークンあたり）。一往復は 200 トークン前後なので 0.05 円未満、1 日 6 回でも月 10 円程度です。
 
