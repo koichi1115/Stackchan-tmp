@@ -14,3 +14,6 @@
 // リレーの LAN アドレス（RELAY_HOST に設定したプライベート IPv4）
 #define RELAY_HOST "192.168.1.20"
 #define RELAY_PORT 8787
+
+// スピーカーの音量（0〜255、省略時 220）
+// #define SPEAKER_VOLUME 220

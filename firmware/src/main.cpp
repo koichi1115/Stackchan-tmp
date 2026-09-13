@@ -44,6 +44,12 @@ constexpr size_t kMaxWavBytes = 2 * 1024 * 1024;
 constexpr size_t kPlayChunkSamples = 4096;
 constexpr uint32_t kReconnectMs = 3000;
 constexpr float kMouthFullScaleRms = 4000.0f;
+// スピーカーの音量（0〜255）。config.h で SPEAKER_VOLUME を定義すれば上書きできる。
+// M5Unified の既定値は控えめで、VOICEVOX の出力だと聞き取りにくい。
+#ifndef SPEAKER_VOLUME
+#define SPEAKER_VOLUME 220
+#endif
+constexpr uint8_t kSpeakerVolume = SPEAKER_VOLUME;
 
 enum class State { Connecting, Listening, Awake, Thinking, Speaking };
 
@@ -382,6 +388,7 @@ void playWav() {
 
   stopMic();
   M5.Speaker.begin();
+  M5.Speaker.setVolume(kSpeakerVolume);
   playing = true;
 
   // 約 4096 サンプルずつ渡す。playRaw は二枠のどちらかが空くまで待つので、i 番目を渡し終えた
