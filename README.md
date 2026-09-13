@@ -43,7 +43,7 @@ Grok からの読み上げは、Cloudflare Worker の受信箱（[`worker/`](wor
 5. **Mac の `.env`**: `cp .env.example .env` の上で、`RELAY_HOST` を Mac の LAN IPv4、`GROK_WEBHOOK_URL` / `GROK_WEBHOOK_SENDER_KEY`、`STT_ENGINE=whisper_http` / `STT_URL=http://127.0.0.1:8080/inference`、`TTS_ENGINE=voicevox_http` / `TTS_URL=http://127.0.0.1:50021`、`INBOX_URL` / `INBOX_POLL_KEY` を設定し、`launchctl kickstart -k gui/$(id -u)/jp.stackchan.relay` で再起動します。
 6. **検証**: `./scripts/test-all.sh` を通し、`python3 -m stackchan_grok_relay.stream_sim --relay-url ws://<Mac>:8787/device/stream --wav <WAV>` で `SPOKEN:` が出ることを確認します。
 7. **ロボット**: `cp firmware/include/config.example.h firmware/include/config.h` に Wi-Fi 資格情報と Mac の LAN アドレスを書き、`cd firmware && pio run -e cores3 -t upload --upload-port <ポート>` で書き込みます（env は基板に合わせます。[`firmware/README.md`](firmware/README.md)）。
-8. 「スタックちゃん」と呼びかけ、「はい？」のあとに話します。一文だけ返ってきます。ボタン A でも同じことができます。
+8. 「スタックちゃん」と呼びかけ、「はい？」のあとに話します。一文だけ返ってきます。顔（画面）をタップしても同じことができます。
 9. 家族チャットで Grok に「スタックちゃんに『ただいま』と言わせて」のように頼むと、数秒後にロボットが読み上げます。
 
 純正へ戻すときは `./scripts/restore-device.sh --port /dev/ttyUSB0 --backup-dir backups/<タイムスタンプ>` です。

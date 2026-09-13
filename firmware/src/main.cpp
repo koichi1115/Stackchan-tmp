@@ -455,10 +455,14 @@ void loop() {
   M5.update();
   ws.loop();
 
-  if (M5.BtnA.wasPressed()) {
+  // CoreS3（StackChan）には物理ボタンが無く、M5Unified の仮想ボタン A も既定では画面の外側
+  // （y >= 240）にしか反応しない。そこで画面のどこかをタップしたら「ボタン A」として扱う。
+  // Core2 / Fire の物理ボタン A もそのまま使える。
+  const bool tapped = M5.Touch.isEnabled() && M5.Touch.getDetail().wasClicked();
+  if (M5.BtnA.wasPressed() || tapped) {
     if (ws.isConnected()) {
       ws.sendTXT("{\"type\":\"button\",\"name\":\"A\"}");
-      Serial.println("ボタン A を送信しました。");
+      Serial.println(tapped ? "画面タップをボタン A として送信しました。" : "ボタン A を送信しました。");
     } else {
       Serial.println("未接続のためボタン A は送りません。");
     }
