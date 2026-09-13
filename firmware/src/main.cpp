@@ -391,8 +391,10 @@ void playWav() {
   M5.Speaker.setVolume(kSpeakerVolume);
   playing = true;
 
-  // 約 4096 サンプルずつ渡す。playRaw は二枠のどちらかが空くまで待つので、i 番目を渡し終えた
-  // 時点で鳴っているのは i-1 番目。口はその音量に合わせる。
+  // 約 4096 サンプルずつ、必ず同じ仮想チャンネル（0）に順番に積む。
+  // channel を -1（自動）にすると空いている別チャンネルへ振られ、チャンクが同時に鳴って
+  // 一瞬のガビガビした音になる。チャンネル 0 の二枠が両方埋まっている間は playRaw が false を
+  // 返すので、空くまで待つ。i 番目を渡し終えた時点で鳴っているのは i-1 番目。口はその音量に合わせる。
   const bool stereo = (channels == 2);
   float prev_ratio = 0.0f;
   for (size_t offset = 0; offset < sample_count; offset += kPlayChunkSamples) {
@@ -400,7 +402,11 @@ void playWav() {
     if (count > kPlayChunkSamples) count = kPlayChunkSamples;
     float ratio = mouthRatio(samples + offset, count);
     if (offset == 0) prev_ratio = ratio;
-    M5.Speaker.playRaw(samples + offset, count, sample_rate, stereo, 1, -1, false);
+    while (!M5.Speaker.playRaw(samples + offset, count, sample_rate, stereo, 1, 0, false)) {
+      M5.update();
+      ws.loop();
+      delay(1);
+    }
     avatar.setMouthOpenRatio(prev_ratio);
     prev_ratio = ratio;
     M5.update();
