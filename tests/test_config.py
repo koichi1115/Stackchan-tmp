@@ -190,3 +190,30 @@ class XaiToolsTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             Config.from_env()
 
+
+class GrokBotEngineTests(unittest.TestCase):
+    @patch.dict(
+        os.environ,
+        {
+            "REPLY_ENGINE": "grok_bot",
+            "GROK_WEBHOOK_URL": "https://grok.example.invalid/routine",
+            "GROK_WEBHOOK_SENDER_KEY": "k",
+            "INBOX_URL": "https://inbox.example.invalid",
+            "INBOX_POLL_KEY": "p",
+        },
+        clear=True,
+    )
+    def test_grok_bot_needs_webhook_and_inbox(self) -> None:
+        config = Config.from_env()
+        self.assertEqual(config.reply_engine, "grok_bot")
+        self.assertEqual(config.grok_bot_reply_timeout_seconds, 40.0)
+
+    @patch.dict(
+        os.environ,
+        {"REPLY_ENGINE": "grok_bot", "GROK_WEBHOOK_URL": "https://grok.example.invalid/routine", "GROK_WEBHOOK_SENDER_KEY": "k"},
+        clear=True,
+    )
+    def test_grok_bot_without_inbox_is_rejected(self) -> None:
+        with self.assertRaises(ConfigError):
+            Config.from_env()
+

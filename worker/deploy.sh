@@ -45,6 +45,15 @@ fi
 
 echo "== D1 ($DB_NAME) にスキーマを適用します（CREATE IF NOT EXISTS のみ。既存の行には触れません）"
 "${WRANGLER[@]}" d1 execute "$DB_NAME" --remote --yes --file schema.sql
+# 既存テーブルに reply_to 列を足す。既にあれば "duplicate column name" で失敗するので、それだけは無視する。
+if ! MIGRATION_OUTPUT="$("${WRANGLER[@]}" d1 execute "$DB_NAME" --remote --yes --file migrations/0002_reply_to.sql 2>&1)"; then
+	if printf '%s' "$MIGRATION_OUTPUT" | grep -qi "duplicate column"; then
+		echo "reply_to 列は既にあります。"
+	else
+		printf '%s\n' "$MIGRATION_OUTPUT" >&2
+		exit 1
+	fi
+fi
 
 echo "== Worker を配置します"
 "${WRANGLER[@]}" deploy

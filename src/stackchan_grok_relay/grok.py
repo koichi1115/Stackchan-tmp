@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import secrets
 import socket
+import time
+from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -125,6 +128,95 @@ def looks_like_async_ack(text: str) -> bool:
         return True
     status = str(decoded.get("status", "")).lower()
     return status in ("accepted", "queued", "started", "running")
+
+
+class ReplyInbox:
+    """GrokBotRoutineClient が返事を受け取るのに使う受信箱の最小インターフェース（InboxClient が満たす）。"""
+
+    def fetch(self, after: int = 0, limit: int = 20, reply_to: str | None = None) -> list:  # pragma: no cover
+        ...
+
+    def ack(self, message_id: int) -> None:  # pragma: no cover
+        ...
+
+
+@dataclass(frozen=True)
+class GrokBotRoutineClient:
+    """Grok Bot の routine を Webhook で起こし、返事を受信箱で待ちます。
+
+    Webhook は「起動しました」を返すだけの非同期型なので、routine 側に
+    「reply_url へ {"text": 返事, "reply_to": 照合 ID} を送信キー付きで POST する」と教えておき、
+    リレーはその照合 ID で受信箱を絞って取り出します（worker/GROK_ROUTINE.md）。
+    """
+
+    url: str
+    sender_key: str
+    inbox: ReplyInbox
+    reply_url: str
+    timeout_seconds: float = 40.0  # 返事を待つ上限。routine の実行はそれなりに時間がかかる
+    webhook_timeout_seconds: float = 10.0
+    poll_interval_seconds: float = 1.0
+    clock: Callable[[], float] = time.monotonic
+    sleep: Callable[[float], None] = time.sleep
+
+    def reply(self, utterance: Utterance) -> GrokResult:
+        reply_to = secrets.token_urlsafe(9)  # [A-Za-z0-9_-] の 12 文字
+        payload = json.dumps(
+            {"text": utterance.text, "reply_to": reply_to, "reply_url": self.reply_url},
+            ensure_ascii=False,
+        ).encode("utf-8")
+        request = Request(
+            self.url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + self.sender_key,
+                "X-Automation-Key": self.sender_key,
+                "User-Agent": "stackchan-grok-relay/0.1",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=self.webhook_timeout_seconds) as response:
+                response.read(MAX_RESPONSE_BYTES)
+        except HTTPError as error:
+            return _failure(
+                "http_error",
+                "routine の起動に失敗しました。routine がオフだと 400 になります。",
+                500 <= error.code < 600,
+                1,
+                detail=f"HTTP {error.code} " + _snippet(_read_error_body(error)),
+            )
+        except (TimeoutError, socket.timeout):
+            return _failure("timeout", "routine の起動が時間内に応答しませんでした。", True, 1)
+        except URLError:
+            return _failure("network_error", "routine の Webhook に接続できませんでした。", True, 1)
+
+        deadline = self.clock() + self.timeout_seconds
+        while True:
+            try:
+                messages = self.inbox.fetch(reply_to=reply_to)
+            except Exception as error:  # noqa: BLE001 - 受信箱の一時障害は待ち続ける
+                messages = []
+                last_error = str(error)
+            else:
+                last_error = ""
+            for message in messages:
+                if getattr(message, "reply_to", None) == reply_to:
+                    try:
+                        self.inbox.ack(message.id)
+                    except Exception:  # noqa: BLE001 - ack 失敗は巡回側が片付ける
+                        pass
+                    return GrokResult(reply=message.text)
+            if self.clock() >= deadline:
+                return _failure(
+                    "routine_timeout",
+                    "routine からの返事が時間内に受信箱へ届きませんでした。",
+                    True,
+                    1,
+                    detail=f"reply_to={reply_to} waited={self.timeout_seconds:.0f}s " + _snippet(last_error),
+                )
+            self.sleep(self.poll_interval_seconds)
 
 
 DEFAULT_XAI_URL = "https://api.x.ai/v1/responses"

@@ -31,6 +31,7 @@ class InboxMessage:
     id: int
     text: str
     created_at: datetime | None
+    reply_to: str | None = None  # 会話の返事に付く照合 ID。無ければ読み上げ用
 
 
 @dataclass(frozen=True)
@@ -39,8 +40,11 @@ class InboxClient:
     poll_key: str
     timeout_seconds: float = 10.0
 
-    def fetch(self, after: int = 0, limit: int = 20) -> list[InboxMessage]:
-        query = urlencode({"after": after, "limit": limit})
+    def fetch(self, after: int = 0, limit: int = 20, reply_to: str | None = None) -> list[InboxMessage]:
+        params = {"after": after, "limit": limit}
+        if reply_to:
+            params["reply_to"] = reply_to
+        query = urlencode(params)
         request = Request(f"{self._base}/messages?{query}", headers=self._headers(), method="GET")
         body = self._call(request)
         raw = body.get("messages")
@@ -54,8 +58,14 @@ class InboxClient:
             text = item.get("text")
             if not isinstance(identifier, int) or not isinstance(text, str):
                 continue
+            reply = item.get("reply_to")
             messages.append(
-                InboxMessage(id=identifier, text=text, created_at=_parse_time(item.get("created_at")))
+                InboxMessage(
+                    id=identifier,
+                    text=text,
+                    created_at=_parse_time(item.get("created_at")),
+                    reply_to=reply if isinstance(reply, str) and reply else None,
+                )
             )
         return messages
 
@@ -109,6 +119,7 @@ class InboxPoller:
     interval_seconds: float = 5.0
     ttl_seconds: float = 6 * 60 * 60
     max_length: int = 500
+    stale_reply_seconds: float = 120.0  # 誰も待っていない会話の返事は、この時間を過ぎたら黙って片付ける
     _stop: threading.Event = field(default_factory=threading.Event)
     _spoken_ids: set[int] = field(default_factory=set)
 
@@ -139,6 +150,12 @@ class InboxPoller:
         for message in self.client.fetch():
             if message.id in self._spoken_ids:
                 self._try_ack(message.id)
+                continue
+            if message.reply_to:
+                # 会話の返事は GrokBotRoutineClient が待って取り出す。巡回では読み上げない。
+                if self._expired(message, now, self.stale_reply_seconds):
+                    _log("inbox_stale_reply", f"待ち手のいない返事 {message.id} を片付けました。")
+                    self._try_ack(message.id)
                 continue
             if self._expired(message, now):
                 _log("inbox_expired", f"古いメッセージ {message.id} を読み上げずに片付けました。")
@@ -172,11 +189,11 @@ class InboxPoller:
             return
         self._spoken_ids.discard(message_id)
 
-    def _expired(self, message: InboxMessage, now: datetime | None) -> bool:
+    def _expired(self, message: InboxMessage, now: datetime | None, limit: float | None = None) -> bool:
         if message.created_at is None:
             return False
         current = now or datetime.now(timezone.utc)
-        return (current - message.created_at).total_seconds() > self.ttl_seconds
+        return (current - message.created_at).total_seconds() > (self.ttl_seconds if limit is None else limit)
 
 
 def _parse_time(value: object) -> datetime | None:

@@ -4,7 +4,15 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 
 from stackchan_grok_relay.domain import Utterance
-from stackchan_grok_relay.grok import GrokApiClient, GrokWebhookClient, extract_api_text, extract_reply, looks_like_async_ack
+from stackchan_grok_relay.grok import (
+    GrokApiClient,
+    GrokBotRoutineClient,
+    GrokWebhookClient,
+    extract_api_text,
+    extract_reply,
+    looks_like_async_ack,
+)
+from stackchan_grok_relay.inbox import InboxMessage
 
 
 class FakeResponse:
@@ -181,6 +189,81 @@ class GrokApiToolsTests(unittest.TestCase):
             ]
         }
         self.assertEqual(extract_api_text(json.dumps(payload)), "晴れです。")
+
+
+class FakeInbox:
+    def __init__(self, replies: dict[str, str] | None = None, after_polls: int = 0) -> None:
+        self.replies = replies or {}
+        self.after_polls = after_polls
+        self.polls = 0
+        self.acked: list[int] = []
+        self.requested: list[str | None] = []
+
+    def fetch(self, after: int = 0, limit: int = 20, reply_to: str | None = None) -> list:
+        self.polls += 1
+        self.requested.append(reply_to)
+        if self.polls <= self.after_polls or reply_to not in self.replies:
+            return []
+        return [InboxMessage(id=7, text=self.replies[reply_to], created_at=None, reply_to=reply_to)]
+
+    def ack(self, message_id: int) -> None:
+        self.acked.append(message_id)
+
+
+class GrokBotRoutineClientTests(unittest.TestCase):
+    def _client(self, inbox, **overrides) -> GrokBotRoutineClient:
+        fields = dict(
+            url="https://grok.example.invalid/routine",
+            sender_key="test-only-placeholder",
+            inbox=inbox,
+            reply_url="https://inbox.example.invalid/messages",
+            timeout_seconds=5.0,
+            poll_interval_seconds=0.0,
+            sleep=lambda _: None,
+        )
+        fields.update(overrides)
+        return GrokBotRoutineClient(**fields)
+
+    @patch("stackchan_grok_relay.grok.urlopen")
+    def test_wakes_routine_then_waits_for_the_matching_reply(self, mocked_urlopen) -> None:
+        mocked_urlopen.return_value = FakeResponse({"success": True, "runUuid": "abc"})
+        inbox = FakeInbox(after_polls=2)
+        client = self._client(inbox)
+
+        def register_reply(*args, **kwargs):
+            body = json.loads(mocked_urlopen.call_args.args[0].data.decode("utf-8"))
+            inbox.replies[body["reply_to"]] = "晴れです。"
+            return FakeResponse({"success": True})
+
+        mocked_urlopen.side_effect = register_reply
+        result = client.reply(Utterance("天気は？"))
+
+        self.assertEqual(result.reply, "晴れです。")
+        self.assertIsNone(result.error)
+        body = json.loads(mocked_urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertEqual(body["text"], "天気は？")
+        self.assertEqual(body["reply_url"], "https://inbox.example.invalid/messages")
+        self.assertRegex(body["reply_to"], r"^[A-Za-z0-9_-]{8,64}$")
+        self.assertEqual(inbox.acked, [7])
+        self.assertTrue(all(r == body["reply_to"] for r in inbox.requested))
+
+    @patch("stackchan_grok_relay.grok.urlopen")
+    def test_times_out_when_no_reply_arrives(self, mocked_urlopen) -> None:
+        mocked_urlopen.return_value = FakeResponse({"success": True})
+        ticks = iter([0.0, 0.0, 1.0, 2.0, 3.0, 6.0, 7.0, 8.0])
+        client = self._client(FakeInbox(), clock=lambda: next(ticks))
+        result = client.reply(Utterance("やあ"))
+        self.assertEqual(result.reply, "")
+        self.assertEqual(result.error.code, "routine_timeout")
+
+    @patch("stackchan_grok_relay.grok.urlopen")
+    def test_routine_off_is_reported_as_http_error(self, mocked_urlopen) -> None:
+        mocked_urlopen.side_effect = HTTPError("https://grok.example.invalid/routine", 400, "bad request", None, None)
+        inbox = FakeInbox()
+        result = self._client(inbox).reply(Utterance("やあ"))
+        self.assertEqual(result.error.code, "http_error")
+        self.assertIn("HTTP 400", result.error.detail)
+        self.assertEqual(inbox.polls, 0)
 
 
 if __name__ == "__main__":

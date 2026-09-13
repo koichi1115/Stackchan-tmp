@@ -8,7 +8,7 @@ from typing import Protocol
 from .config import Config
 from .device import DEVICE_PATH, SPOKEN_TEXT_HEADER, DeviceAudioService
 from .domain import SpokenReply, Utterance, clamp_reply, parse_utterance
-from .grok import GrokApiClient, GrokResult, GrokWebhookClient
+from .grok import GrokApiClient, GrokBotRoutineClient, GrokResult, GrokWebhookClient
 from .inbox import InboxClient, InboxPoller
 from .session import STREAM_PATH, DeviceSession, SessionRegistry
 from .speech import SpeechToText, TextToSpeech, build_speech_to_text, build_text_to_speech
@@ -84,6 +84,15 @@ class StreamService:
 
 
 def build_reply_client(config: Config) -> ReplyClient:
+    if config.reply_engine == "grok_bot":
+        return GrokBotRoutineClient(
+            url=config.webhook_url,
+            sender_key=config.webhook_sender_key,
+            inbox=InboxClient(url=config.inbox_url, poll_key=config.inbox_poll_key),
+            reply_url=config.inbox_url.rstrip("/") + "/messages",
+            timeout_seconds=config.grok_bot_reply_timeout_seconds,
+            webhook_timeout_seconds=max(config.timeout_seconds, 10.0),
+        )
     if config.reply_engine == "grok_api":
         return GrokApiClient(
             api_key=config.xai_api_key,

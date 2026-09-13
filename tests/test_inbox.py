@@ -30,7 +30,13 @@ class FakeInbox:
                 if not self._authorized():
                     self._json(401, {"error": "unauthorized"})
                     return
-                pending = [m for m in inbox.messages if m["id"] not in inbox.acked]
+                from urllib.parse import parse_qs, urlparse
+
+                wanted = parse_qs(urlparse(self.path).query).get("reply_to", [None])[0]
+                pending = [
+                    m for m in inbox.messages
+                    if m["id"] not in inbox.acked and (wanted is None or m.get("reply_to") == wanted)
+                ]
                 self._json(200, {"messages": pending})
 
             def do_POST(self) -> None:
@@ -155,3 +161,38 @@ class InboxPollerTests(unittest.TestCase):
         self.assertEqual(delivered, 0)
         self.assertEqual(session.spoken, [])
         self.assertEqual(inbox.acked, [7])
+
+
+class ReplyToTests(unittest.TestCase):
+    def test_fetch_filters_by_reply_to(self) -> None:
+        with running_inbox() as (inbox, url):
+            inbox.messages.append({"id": 1, "text": "読み上げ", "created_at": now_iso()})
+            inbox.messages.append({"id": 2, "text": "返事", "created_at": now_iso(), "reply_to": "abc123"})
+            client = InboxClient(url=url, poll_key="poll-key")
+            everything = client.fetch()
+            only_reply = client.fetch(reply_to="abc123")
+        self.assertEqual([(m.id, m.reply_to) for m in everything], [(1, None), (2, "abc123")])
+        self.assertEqual([(m.id, m.text) for m in only_reply], [(2, "返事")])
+
+    def test_poller_leaves_fresh_replies_and_clears_stale_ones(self) -> None:
+        with running_inbox() as (inbox, url):
+            inbox.messages.append({"id": 1, "text": "新しい返事", "created_at": now_iso(), "reply_to": "fresh"})
+            inbox.messages.append({"id": 2, "text": "古い返事", "created_at": now_iso(-600), "reply_to": "stale"})
+            inbox.messages.append({"id": 3, "text": "読み上げ", "created_at": now_iso()})
+            registry = SessionRegistry()
+            session = FakeSession()
+            registry.add(session)  # type: ignore[arg-type]
+            poller = InboxPoller(
+                client=InboxClient(url=url, poll_key="poll-key"),
+                registry=registry,
+                text_to_speech=MockTextToSpeech(),
+                interval_seconds=1,
+                ttl_seconds=3600,
+                stale_reply_seconds=120,
+            )
+            with contextlib.redirect_stderr(io.StringIO()):
+                delivered = poller.poll_once()
+        self.assertEqual(delivered, 1)
+        self.assertEqual(session.spoken, ["読み上げ"])
+        self.assertEqual(sorted(inbox.acked), [2, 3])
+

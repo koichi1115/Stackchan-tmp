@@ -12,7 +12,7 @@ class ConfigError(ValueError):
     pass
 
 
-REPLY_ENGINES = ("webhook", "grok_api")
+REPLY_ENGINES = ("webhook", "grok_api", "grok_bot")
 DEFAULT_PROMPT_FILE = "prompt.txt"
 DEFAULT_XAI_MODEL = "grok-4.3"
 DEFAULT_XAI_API_URL = "https://api.x.ai/v1/responses"
@@ -64,6 +64,7 @@ class Config:
     tts_volume_scale: float = 1.0
     xai_tools: tuple[str, ...] = ("web_search",)
     assistant_location: str = ""
+    grok_bot_reply_timeout_seconds: float = 40.0
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -79,12 +80,14 @@ class Config:
         webhook_sender_key = os.getenv("GROK_WEBHOOK_SENDER_KEY", "")
         xai_api_key = os.getenv("XAI_API_KEY", "").strip()
         xai_api_url = os.getenv("XAI_API_URL", DEFAULT_XAI_API_URL).strip() or DEFAULT_XAI_API_URL
-        if reply_engine == "webhook":
+        if reply_engine in ("webhook", "grok_bot"):
             parsed_url = urlparse(webhook_url)
             if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
                 raise ConfigError("GROK_WEBHOOK_URL に有効な HTTP URL を指定してください。")
             if not webhook_sender_key:
                 raise ConfigError("GROK_WEBHOOK_SENDER_KEY を指定してください。")
+            if reply_engine == "grok_bot" and not os.getenv("INBOX_URL", "").strip():
+                raise ConfigError("REPLY_ENGINE=grok_bot には受信箱（INBOX_URL と INBOX_POLL_KEY）が必要です。")
         else:
             if not xai_api_key:
                 raise ConfigError("REPLY_ENGINE=grok_api のときは XAI_API_KEY を指定してください。")
@@ -133,6 +136,7 @@ class Config:
             tts_volume_scale=_read_float("TTS_VOLUME_SCALE", 1.0, 0.1, 3.0),
             xai_tools=_read_tools(),
             assistant_location=os.getenv("ASSISTANT_LOCATION", "").strip(),
+            grok_bot_reply_timeout_seconds=_read_float("GROK_BOT_REPLY_TIMEOUT_SECONDS", 40.0, 5.0, 180.0),
         )
 
 

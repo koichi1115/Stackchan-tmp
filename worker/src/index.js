@@ -2,8 +2,12 @@
 //
 // 依存なしの ES モジュール Worker。データは D1（binding: DB）の messages テーブル。
 //
-//   POST /messages              送信キー  {"text":"…"} → 201 {"id":n}
-//   GET  /messages?after&limit  巡回キー  未読を古い順に → 200 {"messages":[{"id","text","created_at"}]}
+//   POST /messages              送信キー  {"text":"…", "reply_to"?:"…"} → 201 {"id":n}
+//   GET  /messages?after&limit[&reply_to=…]  巡回キー  未読を古い順に
+//                               → 200 {"messages":[{"id","text","created_at","reply_to"}]}
+//
+// reply_to は「会話の返事」に付く照合 ID。リレーが routine を起こすときに渡した ID を、
+// Grok Bot が返事に付けて投函する。リレーは reply_to で絞って取り出す。無いものは読み上げ用。
 //   POST /messages/{id}/ack     巡回キー  読み上げ済みにする → 200 {"id":n,"acked":true} / 404
 //   GET  /healthz               誰でも    "ok"
 //
@@ -14,6 +18,7 @@ const MAX_BODY_BYTES = 8 * 1024;
 const MAX_TEXT_CHARS = 500;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
+const REPLY_TO_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 const encoder = new TextEncoder();
 const utf8 = new TextDecoder("utf-8", { fatal: true });
@@ -129,9 +134,17 @@ async function postMessage(request, env) {
 		return json(400, { error: "text is empty" });
 	}
 
+	let replyTo = null;
+	if (parsed.reply_to !== undefined && parsed.reply_to !== null && parsed.reply_to !== "") {
+		if (typeof parsed.reply_to !== "string" || !REPLY_TO_PATTERN.test(parsed.reply_to)) {
+			return json(400, { error: "reply_to must match [A-Za-z0-9_-]{1,64}" });
+		}
+		replyTo = parsed.reply_to;
+	}
+
 	const row = await env.DB
-		.prepare("INSERT INTO messages (text) VALUES (?) RETURNING id")
-		.bind(cleaned)
+		.prepare("INSERT INTO messages (text, reply_to) VALUES (?, ?) RETURNING id")
+		.bind(cleaned, replyTo)
 		.first();
 	return json(201, { id: row.id });
 }
@@ -144,18 +157,31 @@ async function listMessages(url, env) {
 	}
 	const limit = Math.min(Math.max(requestedLimit, 1), MAX_LIMIT);
 
-	const result = await env.DB
-		.prepare(
-			"SELECT id, text, created_at FROM messages " +
-			"WHERE delivered_at IS NULL AND id > ? ORDER BY id ASC LIMIT ?",
-		)
-		.bind(after, limit)
-		.all();
+	const replyTo = url.searchParams.get("reply_to");
+	if (replyTo !== null && !REPLY_TO_PATTERN.test(replyTo)) {
+		return json(400, { error: "reply_to must match [A-Za-z0-9_-]{1,64}" });
+	}
+
+	const statement = replyTo === null
+		? env.DB
+			.prepare(
+				"SELECT id, text, created_at, reply_to FROM messages " +
+				"WHERE delivered_at IS NULL AND id > ? ORDER BY id ASC LIMIT ?",
+			)
+			.bind(after, limit)
+		: env.DB
+			.prepare(
+				"SELECT id, text, created_at, reply_to FROM messages " +
+				"WHERE delivered_at IS NULL AND id > ? AND reply_to = ? ORDER BY id ASC LIMIT ?",
+			)
+			.bind(after, replyTo, limit);
+	const result = await statement.all();
 
 	const messages = result.results.map((row) => ({
 		id: row.id,
 		text: row.text,
 		created_at: row.created_at,
+		reply_to: row.reply_to ?? null,
 	}));
 	return json(200, { messages });
 }
