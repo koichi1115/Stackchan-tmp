@@ -146,14 +146,16 @@ whisper と VOICEVOX はループバックだけで待ち受け、LAN からは�
 | `WAKE_ACK_TEXT` | `はい？` | ウェイクワードだけのときの返事 |
 | `WAKE_WINDOW_SECONDS` | `8` | 返事の後、本文を待つ秒数 |
 | `VAD_THRESHOLD` | `600` | 発話とみなす RMS（16 bit） |
-| `VAD_SILENCE_MS` | `700` | 発話終了とみなす無音の長さ |
+| `VAD_SILENCE_MS` | `500` | 発話終了とみなす無音の長さ |
 | `VAD_MAX_SECONDS` | `12` | 一発話の上限 |
 | `INBOX_URL` | （空。空なら巡回しない） | Worker の URL |
 | `INBOX_POLL_KEY` | （空） | 巡回キー |
 | `INBOX_POLL_SECONDS` | `5` | 巡回間隔 |
 | `INBOX_MESSAGE_TTL_SECONDS` | `21600` | これより古い未読は読み上げない |
-| `TTS_SPEED_SCALE` | `1.1` | VOICEVOX の話速の倍率。1.0 が既定の声 |
+| `TTS_SPEED_SCALE` | `1.2` | VOICEVOX の話速の倍率。1.0 が既定の声 |
 | `TTS_VOLUME_SCALE` | `1.0` | VOICEVOX の音量の倍率。ロボットのスピーカーが小さいときに上げる |
+| `XAI_TOOLS` | `web_search` | `grok_api` のサーバー側ツール。天気やニュースを自分で調べさせる。空なら無し |
+| `ASSISTANT_LOCATION` | （空） | 話し相手の所在地。天気で場所を聞き返さないために system prompt に入れる |
 
 `RELAY_HOST` は Mac の LAN IPv4 にします。既存の検査（プライベートアドレスのみ）はそのままです。
 

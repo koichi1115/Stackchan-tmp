@@ -78,6 +78,7 @@ class DeviceSession:
     _state_lock: threading.Lock = field(default_factory=threading.Lock)
     _closed: threading.Event = field(default_factory=threading.Event)
     _ack_audio: bytes | None = None  # 「はい？」は毎回合成せず、一度作って使い回す
+    _timing: dict = field(default_factory=dict)
 
     @property
     def state(self) -> str:
@@ -202,8 +203,12 @@ class DeviceSession:
         was_awake = self._state == STATE_AWAKE and self.clock() < self._awake_until
         self._send_state(STATE_THINKING)  # ロボットは困り顔で待つ
         try:
+            started = time.monotonic()
             transcript = self._transcribe(pcm)
+            self._timing["stt_ms"] = int((time.monotonic() - started) * 1000)
+            self._timing["audio_ms"] = int(len(pcm) / (DEVICE_SAMPLE_RATE * DEVICE_SAMPLE_WIDTH) * 1000)
             if not transcript:
+                self._log_timing("empty")
                 self._return_to_listening(was_awake)
                 return
 
@@ -214,10 +219,12 @@ class DeviceSession:
                 if not match.matched:
                     # ウェイクワードが無い発話は捨てます。本文はログにも残しません。
                     _log("ignored_speech", "呼びかけが無いため捨てました。", device=self.device_name)
+                    self._log_timing("ignored")
                     self._return_to_listening(False)
                     return
                 if not match.remainder:
                     self._acknowledge_wake()
+                    self._log_timing("wake")
                     return
                 text = match.remainder
 
@@ -242,21 +249,40 @@ class DeviceSession:
             return ""
 
     def _converse(self, text: str) -> None:
+        started = time.monotonic()
         try:
             spoken = self.relay.handle({"text": text})
         except ValueError as error:
             _log("invalid_transcript", str(error), device=self.device_name)
             self._return_to_listening(False)
             return
+        self._timing["reply_ms"] = int((time.monotonic() - started) * 1000)
         if not spoken.speak:
+            self._log_timing("no_reply")
             self._return_to_listening(False)
             return
+        started = time.monotonic()
         audio = self._synthesize(spoken.speak)
+        self._timing["tts_ms"] = int((time.monotonic() - started) * 1000)
         if audio is None:
             self._return_to_listening(False)
             return
         self._awake_until = 0.0
+        self._log_timing("reply")
         self.speak(spoken.speak, audio)
+
+    def _log_timing(self, outcome: str) -> None:
+        """どの段階に時間がかかっているかを一行で残します。本文は含めません。"""
+        timing = dict(self._timing)
+        self._timing = {}
+        print(
+            json.dumps(
+                {"event": "segment_timing", "outcome": outcome, "device": self.device_name, **timing},
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
 
     def _acknowledge_wake(self) -> None:
         if self._ack_audio is None:

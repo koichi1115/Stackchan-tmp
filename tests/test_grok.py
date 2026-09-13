@@ -134,7 +134,9 @@ class GrokApiClientTests(unittest.TestCase):
         body = json.loads(request.data.decode("utf-8"))
         self.assertEqual(result.reply, "こんにちは。")
         self.assertEqual(body["model"], "grok-4.3")
-        self.assertEqual(body["input"][0], {"role": "system", "content": "一文で。"})
+        self.assertEqual(body["input"][0]["role"], "system")
+        self.assertTrue(body["input"][0]["content"].endswith("一文で。"))
+        self.assertIn("現在の日時は", body["input"][0]["content"])
         self.assertEqual(body["input"][1], {"role": "user", "content": "やあ"})
         self.assertFalse(body["store"])
         self.assertEqual(request.get_header("Authorization"), "Bearer test-only-placeholder")
@@ -146,6 +148,39 @@ class GrokApiClientTests(unittest.TestCase):
         self.assertEqual(result.error.code, "http_error")
         self.assertIn("HTTP 401", result.error.detail)
         self.assertEqual(mocked_urlopen.call_count, 1)
+
+
+class GrokApiToolsTests(unittest.TestCase):
+    @patch("stackchan_grok_relay.grok.urlopen")
+    def test_tools_and_location_are_sent(self, mocked_urlopen) -> None:
+        mocked_urlopen.return_value = FakeResponse({"output_text": "晴れです。"})
+        client = GrokApiClient(
+            api_key="k", system_prompt="一文で。", timeout_seconds=1, tools=("web_search",), location_hint="東京"
+        )
+        client.reply(Utterance("天気は？"))
+        body = json.loads(mocked_urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertEqual(body["tools"], [{"type": "web_search"}])
+        system = body["input"][0]["content"]
+        self.assertIn("現在の日時は", system)
+        self.assertIn("東京", system)
+        self.assertIn("検索ツール", system)
+        self.assertTrue(system.endswith("一文で。"))
+
+    @patch("stackchan_grok_relay.grok.urlopen")
+    def test_without_tools_no_tools_field(self, mocked_urlopen) -> None:
+        mocked_urlopen.return_value = FakeResponse({"output_text": "はい。"})
+        GrokApiClient(api_key="k", timeout_seconds=1).reply(Utterance("やあ"))
+        body = json.loads(mocked_urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertNotIn("tools", body)
+
+    def test_tool_call_items_are_skipped_when_extracting_text(self) -> None:
+        payload = {
+            "output": [
+                {"type": "web_search_call", "status": "completed"},
+                {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "晴れです。"}]},
+            ]
+        }
+        self.assertEqual(extract_api_text(json.dumps(payload)), "晴れです。")
 
 
 if __name__ == "__main__":

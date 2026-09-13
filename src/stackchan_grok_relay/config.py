@@ -48,7 +48,7 @@ class Config:
     wake_ack_text: str = "はい？"
     wake_window_seconds: float = 8.0
     vad_threshold: float = 600.0
-    vad_silence_ms: float = 700.0
+    vad_silence_ms: float = 500.0
     vad_max_seconds: float = 12.0
     inbox_url: str = ""
     inbox_poll_key: str = ""
@@ -60,8 +60,10 @@ class Config:
     xai_model: str = DEFAULT_XAI_MODEL
     xai_api_url: str = DEFAULT_XAI_API_URL
     system_prompt: str = ""
-    tts_speed_scale: float = 1.1
+    tts_speed_scale: float = 1.2
     tts_volume_scale: float = 1.0
+    xai_tools: tuple[str, ...] = ("web_search",)
+    assistant_location: str = ""
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -114,7 +116,7 @@ class Config:
             wake_ack_text=os.getenv("WAKE_ACK_TEXT", "はい？").strip() or "はい？",
             wake_window_seconds=_read_float("WAKE_WINDOW_SECONDS", 8.0, 1.0, 60.0),
             vad_threshold=_read_float("VAD_THRESHOLD", 600.0, 1.0, 32_767.0),
-            vad_silence_ms=_read_float("VAD_SILENCE_MS", 700.0, 100.0, 5_000.0),
+            vad_silence_ms=_read_float("VAD_SILENCE_MS", 500.0, 100.0, 5_000.0),
             vad_max_seconds=_read_float("VAD_MAX_SECONDS", 12.0, 1.0, 60.0),
             inbox_url=_read_inbox_url(),
             inbox_poll_key=os.getenv("INBOX_POLL_KEY", ""),
@@ -127,8 +129,10 @@ class Config:
             xai_model=os.getenv("XAI_MODEL", DEFAULT_XAI_MODEL).strip() or DEFAULT_XAI_MODEL,
             xai_api_url=xai_api_url,
             system_prompt=_read_system_prompt(),
-            tts_speed_scale=_read_float("TTS_SPEED_SCALE", 1.1, 0.5, 2.0),
+            tts_speed_scale=_read_float("TTS_SPEED_SCALE", 1.2, 0.5, 2.0),
             tts_volume_scale=_read_float("TTS_VOLUME_SCALE", 1.0, 0.1, 3.0),
+            xai_tools=_read_tools(),
+            assistant_location=os.getenv("ASSISTANT_LOCATION", "").strip(),
         )
 
 
@@ -141,6 +145,21 @@ def _validate_private_host(host: str) -> None:
         address.is_loopback or any(address in network for network in PRIVATE_NETWORKS)
     ):
         raise ConfigError("RELAY_HOST に公開アドレスは指定できません。")
+
+
+XAI_TOOL_NAMES = ("web_search", "x_search", "code_interpreter")
+
+
+def _read_tools() -> tuple[str, ...]:
+    """XAI_TOOLS はカンマ区切り。既定は web_search。空文字を明示すればツール無し。"""
+    raw = os.getenv("XAI_TOOLS")
+    if raw is None:
+        return ("web_search",)
+    tools = tuple(name.strip() for name in raw.split(",") if name.strip())
+    for name in tools:
+        if name not in XAI_TOOL_NAMES:
+            raise ConfigError(f"XAI_TOOLS には {', '.join(XAI_TOOL_NAMES)} のいずれかを指定してください。")
+    return tools
 
 
 def _read_system_prompt() -> str:

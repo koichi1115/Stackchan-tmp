@@ -171,3 +171,22 @@ class ReplyEngineTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             Config.from_env()
 
+
+class XaiToolsTests(unittest.TestCase):
+    @patch.dict(os.environ, {"REPLY_ENGINE": "grok_api", "XAI_API_KEY": "k"}, clear=True)
+    def test_defaults_to_web_search(self) -> None:
+        config = Config.from_env()
+        self.assertEqual(config.xai_tools, ("web_search",))
+        self.assertEqual(config.assistant_location, "")
+
+    @patch.dict(os.environ, {"REPLY_ENGINE": "grok_api", "XAI_API_KEY": "k", "XAI_TOOLS": "", "ASSISTANT_LOCATION": "東京"}, clear=True)
+    def test_empty_tools_means_none(self) -> None:
+        config = Config.from_env()
+        self.assertEqual(config.xai_tools, ())
+        self.assertEqual(config.assistant_location, "東京")
+
+    @patch.dict(os.environ, {"REPLY_ENGINE": "grok_api", "XAI_API_KEY": "k", "XAI_TOOLS": "web_search, nope"}, clear=True)
+    def test_rejects_unknown_tool(self) -> None:
+        with self.assertRaises(ConfigError):
+            Config.from_env()
+

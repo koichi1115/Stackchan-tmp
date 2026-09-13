@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 import json
 import socket
 from urllib.error import HTTPError, URLError
@@ -143,22 +144,44 @@ class GrokApiClient:
     system_prompt: str = ""
     url: str = DEFAULT_XAI_URL
     timeout_seconds: float = 20.0
-    max_output_tokens: int = 120
+    max_output_tokens: int = 300
+    # サーバー側ツール。web_search を許すと天気やニュースを自分で調べて答える（1 回 0.005 ドル）。
+    tools: tuple[str, ...] = ()
+    location_hint: str = ""  # 「東京」など。天気の質問で場所を聞き返さないために渡す
+    timezone_offset_hours: int = 9
+
+    def build_system_prompt(self, now: datetime | None = None) -> str:
+        """prompt.txt の文面に、現在日時と所在地、検索の使い方を前置きします。"""
+        zone = timezone(timedelta(hours=self.timezone_offset_hours))
+        current = (now or datetime.now(zone)).astimezone(zone)
+        lines = [f"現在の日時は {current.strftime('%Y-%m-%d %H:%M')}（UTC{self.timezone_offset_hours:+d}）です。"]
+        if self.location_hint:
+            lines.append(f"話し相手の所在地は「{self.location_hint}」です。場所を聞き返さずこの土地の情報で答えてください。")
+        if self.tools:
+            lines.append(
+                "天気、ニュース、時刻に依存する質問など最新情報が要るときは検索ツールを使い、"
+                "その結果を一文にまとめて答えてください。「調べてください」「確認してください」とは答えないでください。"
+            )
+        else:
+            lines.append("最新情報が無くて答えられないときは、その旨を一文で伝えてください。")
+        if self.system_prompt:
+            lines.append(self.system_prompt)
+        return "\n".join(lines)
 
     def reply(self, utterance: Utterance) -> GrokResult:
-        messages = []
-        if self.system_prompt:
-            messages.append({"role": "system", "content": self.system_prompt})
-        messages.append({"role": "user", "content": utterance.text})
-        payload = json.dumps(
-            {
-                "model": self.model,
-                "input": messages,
-                "store": False,
-                "max_output_tokens": self.max_output_tokens,
-            },
-            ensure_ascii=False,
-        ).encode("utf-8")
+        messages = [
+            {"role": "system", "content": self.build_system_prompt()},
+            {"role": "user", "content": utterance.text},
+        ]
+        body_fields: dict = {
+            "model": self.model,
+            "input": messages,
+            "store": False,
+            "max_output_tokens": self.max_output_tokens,
+        }
+        if self.tools:
+            body_fields["tools"] = [{"type": tool} for tool in self.tools]
+        payload = json.dumps(body_fields, ensure_ascii=False).encode("utf-8")
         request = Request(
             self.url,
             data=payload,

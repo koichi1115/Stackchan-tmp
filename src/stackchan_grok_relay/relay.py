@@ -91,6 +91,8 @@ def build_reply_client(config: Config) -> ReplyClient:
             system_prompt=config.system_prompt,
             url=config.xai_api_url,
             timeout_seconds=max(config.timeout_seconds, 20.0),
+            tools=config.xai_tools,
+            location_hint=config.assistant_location,
         )
     return GrokWebhookClient(
         url=config.webhook_url,
