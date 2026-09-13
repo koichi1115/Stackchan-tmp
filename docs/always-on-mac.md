@@ -81,6 +81,19 @@ WAV は 16 kHz でなくても構いません（VOICEVOX は 24 kHz）。ロボ�
 
 会話中（`thinking` / `speaking`）に受信箱のメッセージが来たら、会話の一往復が終わってから読み上げます。
 
+## 返答の生成元（`REPLY_ENGINE`）
+
+2026-09-13 に実機で確かめた結果、**Grok の Webhook routine は「起動しました」という確認を即返す非同期型**で、返答の文は同期では返ってきません。さらに routine がオフのときは、すべての要求に本文の無い HTTP 400 を返します。したがって会話の返答には Webhook を使えず、次のどちらかを選びます。
+
+| `REPLY_ENGINE` | 何をするか | 向き |
+| --- | --- | --- |
+| `grok_api`（推奨） | xAI の API（`https://api.x.ai/v1/responses`）を Mac から直接呼び、同期で一文を受け取る。system prompt は `prompt.txt`。鍵は `XAI_API_KEY`（console.x.ai で発行、Mac の `.env` にだけ置く） | 会話（要件 3） |
+| `webhook` | Grok の routine を起こす。返答は返らないので、routine 側で受信箱に投函させる形にしないと会話は成立しない | 家族チャットからの読み上げ（要件 2）の起点 |
+
+費用の目安: `grok-4.3` は入力 1.25 ドル / 出力 2.50 ドル（100 万トークンあたり）。一往復は 200 トークン前後なので 0.05 円未満、1 日 6 回でも月 10 円程度です。
+
+`webhook` のまま会話を試すと、リレーのログに `invalid_response` と `async_ack`（起動確認だけが返った）または `http_error` `HTTP 400`（routine がオフ）が出ます。受け付け形式の調査には `scripts/probe-grok-webhook.py` を使います。
+
 ## Cloudflare Worker 受信箱
 
 - Worker 名: `stackchan-inbox`。データは D1（`stackchan-inbox`）の `messages` テーブル。

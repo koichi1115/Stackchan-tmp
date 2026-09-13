@@ -8,7 +8,7 @@ from typing import Protocol
 from .config import Config
 from .device import DEVICE_PATH, SPOKEN_TEXT_HEADER, DeviceAudioService
 from .domain import SpokenReply, Utterance, clamp_reply, parse_utterance
-from .grok import GrokResult, GrokWebhookClient
+from .grok import GrokApiClient, GrokResult, GrokWebhookClient
 from .inbox import InboxClient, InboxPoller
 from .session import STREAM_PATH, DeviceSession, SessionRegistry
 from .speech import SpeechToText, TextToSpeech, build_speech_to_text, build_text_to_speech
@@ -83,12 +83,24 @@ class StreamService:
         )
 
 
-def build_server(config: Config) -> ThreadingHTTPServer:
-    client = GrokWebhookClient(
+def build_reply_client(config: Config) -> ReplyClient:
+    if config.reply_engine == "grok_api":
+        return GrokApiClient(
+            api_key=config.xai_api_key,
+            model=config.xai_model,
+            system_prompt=config.system_prompt,
+            url=config.xai_api_url,
+            timeout_seconds=max(config.timeout_seconds, 20.0),
+        )
+    return GrokWebhookClient(
         url=config.webhook_url,
         sender_key=config.webhook_sender_key,
         timeout_seconds=config.timeout_seconds,
     )
+
+
+def build_server(config: Config) -> ThreadingHTTPServer:
+    client = build_reply_client(config)
     service = RelayService(client=client, max_reply_length=config.max_reply_length)
     speech_to_text = build_speech_to_text(
         engine=config.stt_engine,

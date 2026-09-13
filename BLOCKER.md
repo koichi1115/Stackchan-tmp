@@ -94,6 +94,11 @@ s3 の「ボタン A で一往復」を確認したあと、所有者は次を�
 
 設計と手順は [`docs/always-on-mac.md`](docs/always-on-mac.md)。実装はリレー（`src/stackchan_grok_relay/`）、Worker（`worker/`）、Mac のセットアップ（`mac/`）、WebSocket 版ファームウェア（`firmware/`）。
 
+### s4 で分かったこと（2026-09-13）
+
+- Grok の Webhook routine は**非同期**で、呼び出しには起動確認だけが返る。routine がオフのときは本文の無い HTTP 400。s1〜s3 が前提にしていた「Webhook が `{"reply"}` を同期で返す」は成立しない。会話の返答は xAI API の直接呼び出し（`REPLY_ENGINE=grok_api`）に切り替える。Webhook routine は家族チャットからの読み上げの起点として残す。
+- 実音声で「スタックちゃん」→「はい？」は Mac 上で成立（whisper.cpp に `STT_PROMPT` でウェイクワードを提示する修正が必要だった）。
+
 ### s4 で未検証のこと
 
 - ~~Mac 上での whisper.cpp / VOICEVOX / リレーの常駐と、実音声での認識精度・往復時間。~~ **2026-09-11 確認済み。** Mac mini M1 に whisper-cpp 1.9.2（`ggml-small.bin`、Metal）、VOICEVOX ENGINE 0.25.2、リレーを launchd で常駐させ、合成音声で一往復 1.1〜1.25 秒。whisper がウェイクワードを別語に書き起こす問題を見つけ、初期プロンプト（`STT_PROMPT`）で解消しました。詳細は [`docs/always-on-mac.md`](docs/always-on-mac.md) の「実音声で分かったこと」。

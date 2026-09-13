@@ -12,6 +12,12 @@ class ConfigError(ValueError):
     pass
 
 
+REPLY_ENGINES = ("webhook", "grok_api")
+DEFAULT_PROMPT_FILE = "prompt.txt"
+DEFAULT_XAI_MODEL = "grok-4.3"
+DEFAULT_XAI_API_URL = "https://api.x.ai/v1/responses"
+
+
 PRIVATE_NETWORKS = (
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
@@ -48,6 +54,12 @@ class Config:
     inbox_poll_key: str = ""
     inbox_poll_seconds: float = 5.0
     inbox_message_ttl_seconds: float = 21_600.0
+    # 返答の生成元。webhook（routine、非同期のため会話には向かない）か grok_api（xAI API 直呼び）
+    reply_engine: str = "webhook"
+    xai_api_key: str = ""
+    xai_model: str = DEFAULT_XAI_MODEL
+    xai_api_url: str = DEFAULT_XAI_API_URL
+    system_prompt: str = ""
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -55,14 +67,26 @@ class Config:
         _validate_private_host(host)
 
         port = _read_int("RELAY_PORT", 8787, 1, 65535)
-        webhook_url = os.getenv("GROK_WEBHOOK_URL", "")
-        parsed_url = urlparse(webhook_url)
-        if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
-            raise ConfigError("GROK_WEBHOOK_URL に有効な HTTP URL を指定してください。")
+        reply_engine = os.getenv("REPLY_ENGINE", "webhook").strip() or "webhook"
+        if reply_engine not in REPLY_ENGINES:
+            raise ConfigError(f"REPLY_ENGINE には {', '.join(REPLY_ENGINES)} のいずれかを指定してください。")
 
+        webhook_url = os.getenv("GROK_WEBHOOK_URL", "")
         webhook_sender_key = os.getenv("GROK_WEBHOOK_SENDER_KEY", "")
-        if not webhook_sender_key:
-            raise ConfigError("GROK_WEBHOOK_SENDER_KEY を指定してください。")
+        xai_api_key = os.getenv("XAI_API_KEY", "").strip()
+        xai_api_url = os.getenv("XAI_API_URL", DEFAULT_XAI_API_URL).strip() or DEFAULT_XAI_API_URL
+        if reply_engine == "webhook":
+            parsed_url = urlparse(webhook_url)
+            if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
+                raise ConfigError("GROK_WEBHOOK_URL に有効な HTTP URL を指定してください。")
+            if not webhook_sender_key:
+                raise ConfigError("GROK_WEBHOOK_SENDER_KEY を指定してください。")
+        else:
+            if not xai_api_key:
+                raise ConfigError("REPLY_ENGINE=grok_api のときは XAI_API_KEY を指定してください。")
+            parsed_api = urlparse(xai_api_url)
+            if parsed_api.scheme != "https" or not parsed_api.hostname:
+                raise ConfigError("XAI_API_URL には https の URL を指定してください。")
 
         stt_engine = _read_engine("STT_ENGINE", STT_ENGINES)
         tts_engine = _read_engine("TTS_ENGINE", TTS_ENGINES)
@@ -96,6 +120,11 @@ class Config:
             inbox_message_ttl_seconds=_read_float(
                 "INBOX_MESSAGE_TTL_SECONDS", 21_600.0, 60.0, 30 * 24 * 3_600.0
             ),
+            reply_engine=reply_engine,
+            xai_api_key=xai_api_key,
+            xai_model=os.getenv("XAI_MODEL", DEFAULT_XAI_MODEL).strip() or DEFAULT_XAI_MODEL,
+            xai_api_url=xai_api_url,
+            system_prompt=_read_system_prompt(),
         )
 
 
@@ -108,6 +137,16 @@ def _validate_private_host(host: str) -> None:
         address.is_loopback or any(address in network for network in PRIVATE_NETWORKS)
     ):
         raise ConfigError("RELAY_HOST に公開アドレスは指定できません。")
+
+
+def _read_system_prompt() -> str:
+    """grok_api の system prompt。既定はリポジトリ直下の prompt.txt（routine と同じ文面）です。"""
+    path = os.getenv("SYSTEM_PROMPT_FILE", DEFAULT_PROMPT_FILE)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
 
 
 def _read_words(name: str, default: tuple[str, ...]) -> tuple[str, ...]:

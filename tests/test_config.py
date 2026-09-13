@@ -147,3 +147,27 @@ class SttPromptTests(unittest.TestCase):
     @patch.dict(os.environ, {**BASE_ENV, "STT_PROMPT": ""}, clear=True)
     def test_an_empty_prompt_disables_it(self) -> None:
         self.assertEqual(Config.from_env().stt_prompt, "")
+
+
+class ReplyEngineTests(unittest.TestCase):
+    @patch.dict(os.environ, {"REPLY_ENGINE": "grok_api", "XAI_API_KEY": "test-only-placeholder"}, clear=True)
+    def test_grok_api_does_not_need_webhook_settings(self) -> None:
+        config = Config.from_env()
+        self.assertEqual(config.reply_engine, "grok_api")
+        self.assertEqual(config.xai_model, "grok-4.3")
+        self.assertTrue(config.xai_api_url.startswith("https://api.x.ai/"))
+
+    @patch.dict(os.environ, {"REPLY_ENGINE": "grok_api"}, clear=True)
+    def test_grok_api_requires_key(self) -> None:
+        with self.assertRaises(ConfigError):
+            Config.from_env()
+
+    @patch.dict(
+        os.environ,
+        {"REPLY_ENGINE": "nope", "GROK_WEBHOOK_URL": "https://example.invalid/w", "GROK_WEBHOOK_SENDER_KEY": "k"},
+        clear=True,
+    )
+    def test_rejects_unknown_reply_engine(self) -> None:
+        with self.assertRaises(ConfigError):
+            Config.from_env()
+

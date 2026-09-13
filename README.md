@@ -30,7 +30,7 @@
 
 Grok からの読み上げは、Cloudflare Worker の受信箱（[`worker/`](worker/)）に Grok が投函し、リレーが外向き HTTPS で取りに行きます。家のネットワークには何も開きません。
 
-Grok Bot Webhook へ送るのは `{"text":"..."}` だけで、`{"reply":"..."}` を受け取ります。sender key は `Authorization: Bearer <sender-key>` と `X-Automation-Key: <sender-key>` に入れます。**Webhook の空応答や失敗、認識できない録音は、すべて無音になります。** エラーを発話することはありません（`/device/utterance` は `204 No Content` を返します）。
+会話の返答は既定では Grok Bot Webhook（`{"text":"..."}` を送り `{"reply":"..."}` を期待）ですが、**Webhook routine は起動確認だけを返す非同期型と分かったため、会話には `REPLY_ENGINE=grok_api`（xAI API の直接呼び出し、[`docs/always-on-mac.md`](docs/always-on-mac.md#返答の生成元reply_engine)）を使います。** Webhook へ送るのは `{"text":"..."}` だけです。sender key は `Authorization: Bearer <sender-key>` と `X-Automation-Key: <sender-key>` に入れます。**Webhook の空応答や失敗、認識できない録音は、すべて無音になります。** エラーを発話することはありません（`/device/utterance` は `204 No Content` を返します）。
 
 経路の詳細は [`docs/always-on-mac.md`](docs/always-on-mac.md)（s4）と [`docs/real-device-path.md`](docs/real-device-path.md)（s3）にあります。
 

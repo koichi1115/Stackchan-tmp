@@ -98,8 +98,142 @@ class GrokWebhookClient:
         text = body.decode("utf-8")
         reply = extract_reply(text)
         if reply is None:
+            if looks_like_async_ack(text):
+                raise ValueError(
+                    "async_ack: Webhook は routine の起動確認だけを返しました（返答は同期では届きません）。"
+                    " REPLY_ENGINE=grok_api を使うか、routine の出力を受信箱へ投函させてください。 "
+                    + _snippet(text)
+                )
             raise ValueError(f"missing_reply: HTTP {status} " + _snippet(text))
         return GrokResult(reply=reply)
+
+
+ASYNC_ACK_KEYS = ("runuuid", "run_id", "runid", "run", "accepted", "queued", "job_id", "jobid")
+
+
+def looks_like_async_ack(text: str) -> bool:
+    """{"success":true,"runUuid":"..."} のような「起動しました」応答かを見ます。"""
+    try:
+        decoded = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(decoded, dict):
+        return False
+    keys = {str(key).lower() for key in decoded}
+    if keys & set(ASYNC_ACK_KEYS):
+        return True
+    status = str(decoded.get("status", "")).lower()
+    return status in ("accepted", "queued", "started", "running")
+
+
+DEFAULT_XAI_URL = "https://api.x.ai/v1/responses"
+DEFAULT_XAI_MODEL = "grok-4.3"
+
+
+@dataclass(frozen=True)
+class GrokApiClient:
+    """xAI の API（Responses）を直接呼び、同期で一文を受け取ります。
+
+    Webhook routine は非同期（起動確認だけ返す）なので、会話の返答にはこちらを使います。
+    鍵はリレーの .env にだけ置きます。
+    """
+
+    api_key: str
+    model: str = DEFAULT_XAI_MODEL
+    system_prompt: str = ""
+    url: str = DEFAULT_XAI_URL
+    timeout_seconds: float = 20.0
+    max_output_tokens: int = 120
+
+    def reply(self, utterance: Utterance) -> GrokResult:
+        messages = []
+        if self.system_prompt:
+            messages.append({"role": "system", "content": self.system_prompt})
+        messages.append({"role": "user", "content": utterance.text})
+        payload = json.dumps(
+            {
+                "model": self.model,
+                "input": messages,
+                "store": False,
+                "max_output_tokens": self.max_output_tokens,
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        request = Request(
+            self.url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + self.api_key,
+                "User-Agent": "stackchan-grok-relay/0.1",
+            },
+            method="POST",
+        )
+        for attempt in range(1, 3):
+            try:
+                with urlopen(request, timeout=self.timeout_seconds) as response:
+                    body = response.read(MAX_RESPONSE_BYTES + 1)
+                if len(body) > MAX_RESPONSE_BYTES:
+                    return _failure("response_too_large", "API の応答が大きすぎます。", False, attempt)
+                raw = body.decode("utf-8")
+                text = extract_api_text(raw)
+                if text is None:
+                    return _failure(
+                        "invalid_response", "API の応答形式が不正です。", False, attempt, detail=_snippet(raw)
+                    )
+                return GrokResult(reply=text)
+            except HTTPError as error:
+                retryable = error.code == 429 or 500 <= error.code < 600
+                if retryable and attempt == 1:
+                    continue
+                return _failure(
+                    "http_error",
+                    "API が HTTP エラーを返しました。",
+                    retryable,
+                    attempt,
+                    detail=f"HTTP {error.code} " + _snippet(_read_error_body(error)),
+                )
+            except (TimeoutError, socket.timeout):
+                if attempt == 1:
+                    continue
+                return _failure("timeout", "API が時間内に応答しませんでした。", True, attempt)
+            except URLError:
+                if attempt == 1:
+                    continue
+                return _failure("network_error", "API に接続できませんでした。", True, attempt)
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
+                return _failure("invalid_response", "API の応答形式が不正です。", False, attempt, detail=str(error))
+        return _failure("unknown_error", "API の呼び出しに失敗しました。", False, 2)
+
+
+def extract_api_text(text: str) -> str | None:
+    """Responses API（output[].content[].text）と Chat Completions（choices[0].message.content）の両方を読みます。"""
+    decoded = json.loads(text)
+    if not isinstance(decoded, dict):
+        return None
+    if isinstance(decoded.get("output_text"), str):
+        return decoded["output_text"]
+    output = decoded.get("output")
+    if isinstance(output, list):
+        pieces: list[str] = []
+        for item in output:
+            if not isinstance(item, dict) or item.get("type") not in (None, "message"):
+                continue
+            content = item.get("content")
+            if isinstance(content, str):
+                pieces.append(content)
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and isinstance(part.get("text"), str):
+                        pieces.append(part["text"])
+        if pieces:
+            return "".join(pieces)
+    choices = decoded.get("choices")
+    if isinstance(choices, list) and choices:
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        if isinstance(message, dict) and isinstance(message.get("content"), str):
+            return message["content"]
+    return None
 
 
 def extract_reply(text: str) -> str | None:
