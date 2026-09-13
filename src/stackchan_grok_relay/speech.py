@@ -111,6 +111,8 @@ class VoicevoxHttpTextToSpeech:
     url: str
     speaker_id: int
     timeout_seconds: float
+    speed_scale: float = 1.0  # 話速。1.0 が VOICEVOX の既定。1.1〜1.2 で歯切れがよくなる
+    volume_scale: float = 1.0  # 音量。ロボットのスピーカーが小さいときに上げる
 
     def synthesize(self, text: str) -> bytes:
         if not text:
@@ -124,6 +126,10 @@ class VoicevoxHttpTextToSpeech:
             self.timeout_seconds,
             "tts",
         )
+        if self.speed_scale != 1.0:
+            query["speedScale"] = self.speed_scale
+        if self.volume_scale != 1.0:
+            query["volumeScale"] = self.volume_scale
 
         synthesis_url = f"{self.url.rstrip('/')}/synthesis?" + urlencode(
             {"speaker": self.speaker_id}
@@ -159,13 +165,22 @@ def build_speech_to_text(
 
 
 def build_text_to_speech(
-    engine: str, url: str, speaker_id: int, timeout_seconds: float
+    engine: str,
+    url: str,
+    speaker_id: int,
+    timeout_seconds: float,
+    speed_scale: float = 1.0,
+    volume_scale: float = 1.0,
 ) -> TextToSpeech:
     if engine == MOCK_ENGINE:
         return MockTextToSpeech()
     if engine == VOICEVOX_HTTP_ENGINE:
         return VoicevoxHttpTextToSpeech(
-            url=url, speaker_id=speaker_id, timeout_seconds=timeout_seconds
+            url=url,
+            speaker_id=speaker_id,
+            timeout_seconds=timeout_seconds,
+            speed_scale=speed_scale,
+            volume_scale=volume_scale,
         )
     raise ValueError(f"TTS_ENGINE は {TTS_ENGINES} のいずれかにしてください。")
 

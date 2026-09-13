@@ -60,6 +60,8 @@ class Config:
     xai_model: str = DEFAULT_XAI_MODEL
     xai_api_url: str = DEFAULT_XAI_API_URL
     system_prompt: str = ""
+    tts_speed_scale: float = 1.1
+    tts_volume_scale: float = 1.0
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -125,6 +127,8 @@ class Config:
             xai_model=os.getenv("XAI_MODEL", DEFAULT_XAI_MODEL).strip() or DEFAULT_XAI_MODEL,
             xai_api_url=xai_api_url,
             system_prompt=_read_system_prompt(),
+            tts_speed_scale=_read_float("TTS_SPEED_SCALE", 1.1, 0.5, 2.0),
+            tts_volume_scale=_read_float("TTS_VOLUME_SCALE", 1.0, 0.1, 3.0),
         )
 
 

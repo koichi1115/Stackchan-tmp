@@ -114,6 +114,8 @@ def build_server(config: Config) -> ThreadingHTTPServer:
         url=config.tts_url,
         speaker_id=config.tts_speaker_id,
         timeout_seconds=config.speech_timeout_seconds,
+        speed_scale=config.tts_speed_scale,
+        volume_scale=config.tts_volume_scale,
     )
     device_service = DeviceAudioService(
         relay=service,

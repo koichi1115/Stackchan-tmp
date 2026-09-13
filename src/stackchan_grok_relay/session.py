@@ -77,6 +77,7 @@ class DeviceSession:
     _speech_lock: threading.Lock = field(default_factory=threading.Lock)
     _state_lock: threading.Lock = field(default_factory=threading.Lock)
     _closed: threading.Event = field(default_factory=threading.Event)
+    _ack_audio: bytes | None = None  # 「はい？」は毎回合成せず、一度作って使い回す
 
     @property
     def state(self) -> str:
@@ -258,7 +259,9 @@ class DeviceSession:
         self.speak(spoken.speak, audio)
 
     def _acknowledge_wake(self) -> None:
-        audio = self._synthesize(self.wake_ack_text)
+        if self._ack_audio is None:
+            self._ack_audio = self._synthesize(self.wake_ack_text)
+        audio = self._ack_audio
         self._awake_until = self.clock() + self.wake_window_seconds
         if audio is None:
             self._send_state(STATE_AWAKE)

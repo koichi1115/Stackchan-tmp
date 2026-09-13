@@ -182,3 +182,56 @@ class RealEngineFailureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VoicevoxScaleTests(unittest.TestCase):
+    """audio_query の結果に speedScale / volumeScale を足してから synthesis へ渡すことを確かめます。"""
+
+    def _run(self, engine: VoicevoxHttpTextToSpeech) -> dict:
+        import io
+        import json as _json
+
+        captured: dict = {}
+
+        class FakeResponse(io.BytesIO):
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return None
+
+        def fake_urlopen(request, timeout):
+            if "/audio_query" in request.full_url:
+                return FakeResponse(_json.dumps({"accent_phrases": [], "speedScale": 1.0}).encode("utf-8"))
+            captured["synthesis_body"] = _json.loads(request.data.decode("utf-8"))
+            return FakeResponse(tone_wav(0.1))
+
+        with mock.patch.object(speech, "urlopen", fake_urlopen):
+            engine.synthesize("はい？")
+        return captured["synthesis_body"]
+
+    def test_default_scales_leave_the_query_untouched(self) -> None:
+        body = self._run(VoicevoxHttpTextToSpeech(url="http://127.0.0.1:50021", speaker_id=1, timeout_seconds=1))
+        self.assertEqual(body["speedScale"], 1.0)
+        self.assertNotIn("volumeScale", body)
+
+    def test_custom_scales_are_applied(self) -> None:
+        body = self._run(
+            VoicevoxHttpTextToSpeech(
+                url="http://127.0.0.1:50021", speaker_id=1, timeout_seconds=1, speed_scale=1.2, volume_scale=1.5
+            )
+        )
+        self.assertEqual(body["speedScale"], 1.2)
+        self.assertEqual(body["volumeScale"], 1.5)
+
+    def test_builder_passes_scales(self) -> None:
+        tts = build_text_to_speech(
+            engine="voicevox_http", url="http://127.0.0.1:50021", speaker_id=3, timeout_seconds=1,
+            speed_scale=1.3, volume_scale=0.8,
+        )
+        self.assertIsInstance(tts, VoicevoxHttpTextToSpeech)
+        self.assertEqual(tts.speed_scale, 1.3)
+        self.assertEqual(tts.volume_scale, 0.8)
+

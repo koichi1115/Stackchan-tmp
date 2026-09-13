@@ -187,6 +187,48 @@ class StreamEndpointTests(unittest.TestCase):
         self.fail("speak が届きませんでした。")
 
 
+class AckCacheTests(unittest.TestCase):
+    def test_wake_ack_is_synthesized_once_per_session(self) -> None:
+        class CountingTts(MockTextToSpeech):
+            calls = 0
+
+            def synthesize(self, text: str) -> bytes:
+                CountingTts.calls += 1
+                return super().synthesize(text)
+
+        relay = RelayService(client=FakeClient(), max_reply_length=120)
+        streams = StreamService(
+            relay=relay,
+            speech_to_text=ScriptedSpeechToText([]),
+            text_to_speech=CountingTts(),
+            wake_matcher=WakeWordMatcher(),
+            wake_ack_text="はい？",
+            wake_window_seconds=8,
+            vad_threshold=600,
+            vad_silence_ms=700,
+            vad_max_seconds=12,
+            registry=SessionRegistry(),
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(relay, None, streams))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                raw, link = connect(f"ws://127.0.0.1:{server.server_port}/device/stream", timeout=10)
+                try:
+                    link.send_text(json.dumps({"type": "hello", "device": "test"}))
+                    for _ in range(3):
+                        link.send_text(json.dumps({"type": "button", "name": "A"}))
+                        StreamEndpointTests._await_speak(StreamEndpointTests(), link)
+                finally:
+                    link.close()
+                    raw.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(CountingTts.calls, 1)
+
+
 class SpeechErrorSilenceTests(unittest.TestCase):
     def test_stt_error_is_silent(self) -> None:
         class BrokenStt:
